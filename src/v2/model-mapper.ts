@@ -128,9 +128,22 @@ export function mapToDiscoveredV2Model(
     result.attachment = intermediateV1.attachment
   }
 
-  // Cost mapping (V1 cost.input/output -> V2 cost object)
+  // Cost mapping (V1 cost.input/output -> V2 cost array of tiers)
   if (intermediateV1.cost && typeof intermediateV1.cost === "object") {
-    result.cost = intermediateV1.cost
+    if (Array.isArray(intermediateV1.cost)) {
+      result.cost = intermediateV1.cost
+    } else {
+      result.cost = [
+        {
+          input: intermediateV1.cost.input ?? 0,
+          output: intermediateV1.cost.output ?? 0,
+          cache: {
+            read: intermediateV1.cost.cache_read ?? intermediateV1.cost.cache?.read ?? 0,
+            write: intermediateV1.cost.cache_write ?? intermediateV1.cost.cache?.write ?? 0,
+          },
+        },
+      ]
+    }
   }
 
   return result as DiscoveredV2Model
