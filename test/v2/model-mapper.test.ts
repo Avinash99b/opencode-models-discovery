@@ -99,6 +99,9 @@ describe("V2 model-mapper", () => {
           supports_function_calling: true,
           supports_vision: true,
           mode: "chat",
+          input_cost_per_token: 0.00000075,
+          output_cost_per_token: 0.00000375,
+          cache_read_input_token_cost: 0.000000075,
         },
       }],
     }
@@ -111,6 +114,17 @@ describe("V2 model-mapper", () => {
     expect(mapped.limit.output).toBe(4_096)
     expect(mapped.capabilities.input).toContain("image")
     expect(mapped.capabilities.tools).toBe(true)
+    expect(Array.isArray(mapped.cost)).toBe(true)
+    expect(mapped.cost).toEqual([
+      {
+        input: 0.75,
+        output: 3.75,
+        cache: {
+          read: 0.075,
+          write: 0,
+        },
+      },
+    ])
   })
 
   it("filters non-chat models when filterNonChat is active", () => {

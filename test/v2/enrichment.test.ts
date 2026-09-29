@@ -81,6 +81,10 @@ describe("V2 provider discovery with metadata enrichment", () => {
       settings: { baseURL: "http://127.0.0.1:1234/v1" },
     }], options, fetcher as unknown as typeof fetch)
 
+    expect(fetcher).toHaveBeenCalledWith(
+      "http://127.0.0.1:1234/v1/model/info",
+      expect.anything()
+    )
     const models = inventory.get("local")!
     expect(models.has("chat-gpt")).toBe(true)
     expect(models.has("text-embed")).toBe(false)

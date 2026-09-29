@@ -59,7 +59,9 @@ async function resolveModelInfoEnricher(
     const targetEndpoint = config.modelInfoEndpoint ?? defaultEndpoint
     const infoUrl = /^https?:\/\//i.test(targetEndpoint)
       ? targetEndpoint
-      : new URL(targetEndpoint.replace(/^\//, ""), baseURL.endsWith("/") ? baseURL : `${baseURL}/`).toString()
+      : targetEndpoint.startsWith("/")
+        ? new URL(targetEndpoint, new URL(baseURL).origin).toString()
+        : new URL(targetEndpoint, baseURL.endsWith("/") ? baseURL : `${baseURL}/`).toString()
 
     const headers = new Headers({ accept: "application/json" })
     if (apiKey) headers.set("authorization", `Bearer ${apiKey}`)
