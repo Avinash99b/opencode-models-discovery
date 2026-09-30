@@ -11,7 +11,7 @@ export interface CatalogProvider extends ConfiguredProvider {
 }
 
 function isOpenAICompatible(provider: CatalogProvider): boolean {
-  return provider.package === "@opencode-ai/ai/providers/openai-compatible" || provider.package.includes("openai-compatible")
+  return provider.package.includes("openai-compatible") || provider.package.includes("anthropic-compatible")
 }
 
 function matchesFieldFilter(model: RawOpenAIModel, filter: ModelFieldFilter): boolean {
