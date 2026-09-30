@@ -56,6 +56,27 @@ describe("V2 provider discovery", () => {
     }))
   })
 
+  it("discovers models from an anthropic-compatible provider package", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "claude-sonnet" }] }),
+    })
+
+    const inventory = await discoverInventory([{
+      id: "anthropic",
+      package: "@opencode/ai/providers/anthropic-compatible",
+      settings: { baseURL: "http://127.0.0.1:1234/v1" },
+    }], new Map([[
+      "anthropic",
+      parseProviderDiscoveryOptions({ enabled: true })!,
+    ]]), fetcher)
+
+    expect(fetcher).toHaveBeenCalledWith("http://127.0.0.1:1234/v1/models", expect.objectContaining({
+      headers: expect.any(Object),
+    }))
+    expect(inventory.get("anthropic")?.get("claude-sonnet")?.modelID).toBe("claude-sonnet")
+  })
+
   it("continues discovery when another provider fails", async () => {
     const providerOptions = new Map(options)
     providerOptions.set("unavailable", parseProviderDiscoveryOptions({ enabled: true })!)

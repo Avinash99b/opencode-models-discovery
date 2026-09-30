@@ -1,6 +1,6 @@
 # Provider Compatibility
 
-This page primarily documents the OpenCode v1 provider shape. OpenCode v2 support is currently in beta and uses `plugins` plus `providers.<id>.settings`; see the [OpenCode v2 configuration](configuration.md#opencode-v2-configuration-beta-support) section before using these examples with OpenCode v2.
+This page primarily documents the OpenCode v1 provider shape. OpenCode v2 support is currently in beta and uses `plugins` plus `providers.<id>.settings`; see the [OpenCode v2 configuration](configuration.md#opencode-v2-configuration-beta-support) section before using these examples with OpenCode v2. In V2, provider packages containing `openai-compatible` or `anthropic-compatible` are recognized when they expose an OpenAI-compatible model-list endpoint.
 
 ## Supported Providers
 
