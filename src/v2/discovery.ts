@@ -11,10 +11,6 @@ export interface CatalogProvider extends ConfiguredProvider {
   readonly apiKey?: string
 }
 
-function isOpenAICompatible(provider: CatalogProvider): boolean {
-  return provider.package.includes("openai-compatible") || provider.package.includes("anthropic-compatible")
-}
-
 function matchesFieldFilter(model: RawOpenAIModel, filter: ModelFieldFilter): boolean {
   const value = model[filter.field]
   if (filter.match !== undefined) return typeof value === "string" && new RegExp(filter.match).test(value)
@@ -93,7 +89,7 @@ export async function discoverInventory(
 
   await Promise.all(providers.map(async (provider) => {
     const config = discovery.get(provider.id)
-    if (!config || !isOpenAICompatible(provider)) return
+    if (!config) return
 
     const baseURL = typeof provider.settings.baseURL === "string" ? provider.settings.baseURL : undefined
     if (!baseURL) return

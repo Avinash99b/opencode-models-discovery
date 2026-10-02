@@ -82,7 +82,7 @@ describe("V2 provider discovery", () => {
     }))
   })
 
-  it("discovers models from an anthropic-compatible provider package", async () => {
+  it("discovers models from an anthropic provider package when explicitly enabled", async () => {
     const fetcher = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ data: [{ id: "claude-sonnet" }] }),
@@ -90,7 +90,7 @@ describe("V2 provider discovery", () => {
 
     const inventory = await discoverInventory([{
       id: "anthropic",
-      package: "@opencode/ai/providers/anthropic-compatible",
+      package: "@opencode/ai/providers/anthropic",
       settings: { baseURL: "http://127.0.0.1:1234/v1" },
     }], new Map([[
       "anthropic",
