@@ -1665,6 +1665,37 @@ describe('ModelDiscovery Plugin', () => {
       )
     })
 
+    it('should disambiguate colliding smart names with model owners', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: [
+            { id: 'github-copilot/gpt-5.6-sol', object: 'model', created: 1234567890, owned_by: 'github-copilot' },
+            { id: 'openai/gpt-5.6-sol', object: 'model', created: 1234567890, owned_by: 'openai' },
+          ]
+        })
+      })
+
+      const config: any = {
+        provider: {
+          ollama: {
+            npm: '@ai-sdk/openai-compatible',
+            name: 'Ollama',
+            options: {
+              baseURL: 'http://127.0.0.1:11434/v1',
+              modelsDiscovery: { smartModelName: true }
+            },
+            models: {}
+          }
+        }
+      }
+
+      await pluginHooks.config(config)
+
+      expect(config.provider.ollama.models['github-copilot/gpt-5.6-sol'].name).toBe('GPT 5.6 Sol (Github Copilot)')
+      expect(config.provider.ollama.models['openai/gpt-5.6-sol'].name).toBe('GPT 5.6 Sol (Openai)')
+    })
+
     it('should handle provider offline gracefully', async () => {
       mockFetch.mockRejectedValue(new Error('Connection refused'))
 

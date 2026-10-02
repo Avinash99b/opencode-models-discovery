@@ -3,6 +3,7 @@ import path from 'node:path'
 import { xdgData } from 'xdg-basedir'
 import { ToastNotifier } from '../ui/toast-notifier'
 import { categorizeModel, formatModelName, extractModelOwner } from '../utils'
+import { disambiguateModelNames } from '../utils/disambiguate-model-names'
 import { normalizeProviderOriginForCache, discoverModelsFromProvider, discoverModelInfoFromProvider, canDiscoverModels, isValidModel, DEFAULT_REQUEST_TIMEOUT_MS } from '../utils/openai-compatible-api'
 import { createModelInfoEnricher, isSupportedModelInfoFormat, type ModelInfoEnricher } from '../utils/model-info'
 import { DEFAULT_CACHE_TTL_SECONDS, getDefaultDiscoveryConfigFromEnv, getProviderModelFieldFilters, getProviderModelRegexFilter, shouldDiscoverModel, shouldDiscoverModelByFields, shouldDiscoverProviderWithOverride, ModelInfoFormat } from '../types/plugin-config'
@@ -381,10 +382,14 @@ export async function enhanceConfig(
           modelInfoEnricher?.applyModelInfo(modelConfig, model.id, model)
           discoveredModels[modelKey] = modelConfig
         }
+      }
 
-        if (cacheEnabled && !await currentProviderModelStore.saveModels(cacheIdentity, discoveredModels, persistedState)) {
-          logger.debug('Could not persist discovered provider models', { provider: providerName })
-        }
+      if (smartModelNameEnabled) {
+        disambiguateModelNames(Object.values(discoveredModels))
+      }
+
+      if (cacheEnabled && !usingPersistedModels && !await currentProviderModelStore.saveModels(cacheIdentity, discoveredModels, persistedState)) {
+        logger.debug('Could not persist discovered provider models', { provider: providerName })
       }
 
       const modelsWithOverrides = Object.fromEntries(Object.entries(discoveredModels).map(([modelID, model]) => [
