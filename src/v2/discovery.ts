@@ -4,14 +4,11 @@ import { mapToDiscoveredV2Model, type RawOpenAIModel } from "./model-mapper.js"
 import { createModelInfoEnricher, type ModelInfoEnricher } from "../utils/model-info/index.js"
 import { ModelInfoFormat } from "../types/plugin-config.js"
 import { fetchModelsDevData, DEFAULT_MODELS_DEV_URL } from "../utils/models-dev-fetcher.js"
+import { disambiguateModelNames } from "../utils/disambiguate-model-names.js"
 
 export interface CatalogProvider extends ConfiguredProvider {
   /** Ephemeral request credential resolved by the plugin refresh orchestration. */
   readonly apiKey?: string
-}
-
-function isOpenAICompatible(provider: CatalogProvider): boolean {
-  return provider.package.includes("openai-compatible") || provider.package.includes("anthropic-compatible")
 }
 
 function matchesFieldFilter(model: RawOpenAIModel, filter: ModelFieldFilter): boolean {
@@ -92,7 +89,7 @@ export async function discoverInventory(
 
   await Promise.all(providers.map(async (provider) => {
     const config = discovery.get(provider.id)
-    if (!config || !isOpenAICompatible(provider)) return
+    if (!config) return
 
     const baseURL = typeof provider.settings.baseURL === "string" ? provider.settings.baseURL : undefined
     if (!baseURL) return
@@ -120,16 +117,20 @@ export async function discoverInventory(
       if (!Array.isArray(payload?.data)) return
 
       const models = new Map<string, DiscoveredV2Model>()
-      for (const entry of payload.data) {
+       for (const entry of payload.data) {
         if (!entry || typeof entry !== "object" || typeof (entry as { id?: unknown }).id !== "string") continue
         const candidate = entry as RawOpenAIModel
         if (!included(candidate, config)) continue
         if (enricher?.shouldSkipModel(candidate.id)) continue
 
-        models.set(candidate.id, mapToDiscoveredV2Model(candidate, config, enricher))
-      }
+         models.set(candidate.id, mapToDiscoveredV2Model(candidate, config, enricher))
+       }
 
-      inventory.set(provider.id, models)
+       if (config.smartModelName) {
+         disambiguateModelNames([...models.values()])
+       }
+
+       inventory.set(provider.id, models)
     } catch {
       // Network and parsing failures are non-fatal; existing discovered models remain untouched.
     }

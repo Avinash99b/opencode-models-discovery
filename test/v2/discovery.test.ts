@@ -41,6 +41,32 @@ describe("V2 provider discovery", () => {
     })]]))
   })
 
+  it("disambiguates colliding smart model names with their owners", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: "github-copilot/gpt-5.6-sol" },
+          { id: "openai/gpt-5.6-sol" },
+          { id: "qwen/qwen3-30b" },
+        ],
+      }),
+    })
+
+    const inventory = await discoverInventory([{
+      id: "local",
+      package: "@opencode-ai/ai/providers/openai-compatible",
+      settings: { baseURL: "http://127.0.0.1:1234/v1" },
+    }], new Map([[
+      "local",
+      parseProviderDiscoveryOptions({ enabled: true, smartModelName: true })!,
+    ]]), fetcher)
+
+    expect(inventory.get("local")?.get("github-copilot/gpt-5.6-sol")?.name).toBe("GPT 5.6 Sol (Github Copilot)")
+    expect(inventory.get("local")?.get("openai/gpt-5.6-sol")?.name).toBe("GPT 5.6 Sol (Openai)")
+    expect(inventory.get("local")?.get("qwen/qwen3-30b")?.name).toBe("Qwen3 30B")
+  })
+
   it("prefers an ephemeral managed credential over settings.apiKey", async () => {
     const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: [] }) })
 
@@ -56,7 +82,7 @@ describe("V2 provider discovery", () => {
     }))
   })
 
-  it("discovers models from an anthropic-compatible provider package", async () => {
+  it("discovers models from an anthropic provider package when explicitly enabled", async () => {
     const fetcher = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ data: [{ id: "claude-sonnet" }] }),
@@ -64,7 +90,7 @@ describe("V2 provider discovery", () => {
 
     const inventory = await discoverInventory([{
       id: "anthropic",
-      package: "@opencode/ai/providers/anthropic-compatible",
+      package: "@opencode/ai/providers/anthropic",
       settings: { baseURL: "http://127.0.0.1:1234/v1" },
     }], new Map([[
       "anthropic",

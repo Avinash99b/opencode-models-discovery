@@ -36,7 +36,7 @@ OpenCode v2 uses `plugins` and `providers`. The plugin can be declared directly 
 }
 ```
 
-The V2 options are the same discovery options described below, except that their path starts with `providers.<id>.settings.modelsDiscovery`. V2 defaults the discovery endpoint to `/v1/models`, uses a default request timeout of 5000 ms, and requires `enabled: true` for the provider to participate. The V2 adapter recognizes provider packages containing `openai-compatible` or `anthropic-compatible`; both must expose an OpenAI-compatible model-list endpoint. For a provider such as DeepSeek that exposes `/models`, set `"endpoint": "/models"`. Local plugin development should use a directory URL such as `file:///absolute/path/to/opencode-models-discovery/dist`; OpenCode v2 does not accept a direct path to a JavaScript entry file.
+The V2 options are the same discovery options described below, except that their path starts with `providers.<id>.settings.modelsDiscovery`. V2 defaults the discovery endpoint to `/v1/models`, uses a default request timeout of 5000 ms, and requires `enabled: true` for the provider to participate. When discovery is explicitly enabled, the adapter attempts the configured model-list endpoint regardless of the provider package; the endpoint must return an OpenAI-compatible model-list response. For a provider such as DeepSeek that exposes `/models`, set `"endpoint": "/models"`. Local plugin development should use a directory URL such as `file:///absolute/path/to/opencode-models-discovery/dist`; OpenCode v2 does not accept a direct path to a JavaScript entry file.
 
 The V2 adapter currently does not implement the V1 persisted disk cache, V1 auth-store fallback, or V1 helper slash commands. After rebuilding a local plugin, restart the OpenCode v2 background service with `opencode service restart`.
 
@@ -86,7 +86,7 @@ Each provider can configure discovery behavior through `provider.<name>.options.
 | `provider.<name>.options.modelsDiscovery.models.excludeRegex` | `string[]` | Shortcut regex deny-list for discovered model ids only |
 | `provider.<name>.options.modelsDiscovery.models.includeBy` | `{ field: string, equals: string \| number \| boolean \| null }[]` or `{ field: string, match: string }[]` | Allow-list for top-level raw provider model fields |
 | `provider.<name>.options.modelsDiscovery.models.excludeBy` | `{ field: string, equals: string \| number \| boolean \| null }[]` or `{ field: string, match: string }[]` | Deny-list for top-level raw provider model fields |
-| `provider.<name>.options.modelsDiscovery.smartModelName` | `boolean` | Use human-friendly display names instead of raw discovered model ids |
+| `provider.<name>.options.modelsDiscovery.smartModelName` | `boolean` | Use human-friendly display names instead of raw discovered model ids; when names collide, append the model owner to distinguish them |
 | `provider.<name>.options.modelsDiscovery.cache.enabled` | `boolean` | Opt in to provider-scoped cached filtered and enriched model configurations; defaults to `false` |
 | `provider.<name>.options.modelsDiscovery.cache.ttlSeconds` | non-negative finite `number` | Cache lifetime in seconds; defaults to `86400` |
 
