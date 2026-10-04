@@ -79,8 +79,8 @@ Each provider can configure discovery behavior through `provider.<name>.options.
 | `provider.<name>.options.modelsDiscovery.enabled` | `boolean` | Force enable or disable discovery for a single provider |
 | `provider.<name>.options.modelsDiscovery.endpoint` | `string` | Provider-specific models endpoint as an origin-relative path beginning with `/`. Defaults to `/v1/models` |
 | `provider.<name>.options.modelsDiscovery.timeoutMs` | positive finite `number` | Per-request timeout for the provider's models and provider-specific metadata endpoints. Defaults to `3000` |
-| `provider.<name>.options.modelsDiscovery.modelInfoEndpoint` | `string` | Override a format-specific metadata endpoint as an origin-relative path or complete URL. Defaults to `/v1/model/info` for `"litellm"` and `/api/v1/models` for `"lmstudio"` |
-| `provider.<name>.options.modelsDiscovery.modelInfoFormat` | `string` | Model info response format. Currently supports `"bifrost"`, `"litellm"`, `"models.dev"`, `"vllm"`, `"lmstudio"`, `"llama-swap"`, and `"omniroute"` |
+| `provider.<name>.options.modelsDiscovery.modelInfoEndpoint` | `string` | Override a format-specific metadata endpoint as an origin-relative path or complete URL. Defaults to `/v1/model/info` for `"litellm"` and `/api/v1/models` for `"lmstudio"`; for `"aiproxy"`, it overrides the models.dev fallback URL |
+| `provider.<name>.options.modelsDiscovery.modelInfoFormat` | `string` | Model info response format. Currently supports `"aiproxy"`, `"bifrost"`, `"litellm"`, `"models.dev"`, `"vllm"`, `"lmstudio"`, `"llama-swap"`, and `"omniroute"` |
 | `provider.<name>.options.modelsDiscovery.filterNonChat` | `boolean` | When model info is available, skip models whose `model_info.mode` is not `chat`. Defaults to `true` |
 | `provider.<name>.options.modelsDiscovery.models.includeRegex` | `string[]` | Shortcut regex allow-list for discovered model ids only |
 | `provider.<name>.options.modelsDiscovery.models.excludeRegex` | `string[]` | Shortcut regex deny-list for discovered model ids only |
@@ -284,10 +284,11 @@ Community provider examples live in [`docs/config_example/`](config_example/).
 
 The generic OpenAI-compatible `/v1/models` endpoint only guarantees a small model list shape. Extra metadata such as context limits, tool calling, reasoning, image input, or structured output is provider-specific, so metadata enrichment is opt-in.
 
-The plugin currently supports seven model info formats:
+The plugin currently supports eight model info formats:
 
 | Format | Source | Requires `modelInfoEndpoint` | Notes |
 |--------|--------|------------------------------|-------|
+| `"aiproxy"` | AIProxy's discovered `/models` entries plus models.dev | No | Maps inline AIProxy limits, pricing, and declared effort tiers; models.dev supplies general metadata |
 | `"bifrost"` | Fields in Bifrost's `/v1/models` response | No | Reads Bifrost inline limits, modalities, and base pricing when present |
 | `"litellm"` | Provider-specific model info endpoint | No | Uses `/v1/model/info` by default; set `modelInfoEndpoint` to override it |
 | `"models.dev"` | `https://models.dev/models.json` | No | Uses the public models.dev metadata index |
@@ -295,6 +296,60 @@ The plugin currently supports seven model info formats:
 | `"lmstudio"` | LM Studio 0.4.0+ `/api/v1/models` inventory | No | Uses `/api/v1/models` by default; set `modelInfoEndpoint` for another path |
 | `"llama-swap"` | Fields in llama-swap's `/v1/models` response | No | Reads inline context, modalities, and function-calling metadata when present |
 | `"omniroute"` | Fields in OmniRoute's `/v1/models` response | No | Reads OmniRoute inline limits, modalities, and capabilities when present |
+
+### AIProxy Metadata
+
+Use `modelInfoFormat: "aiproxy"` when the configured model-list endpoint returns AIProxy's inline `limits` and `pricing` fields. The plugin makes no second request to AIProxy. It also fetches models.dev for general metadata and display names, then overlays valid AIProxy values. Explicit model configuration remains highest priority.
+
+```json
+{
+  "plugin": ["opencode-models-discovery"],
+  "provider": {
+    "aiproxy": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://aiproxy.example/api",
+        "apiKey": "{env:AIPROXY_API_KEY}",
+        "modelsDiscovery": {
+          "enabled": true,
+          "endpoint": "/api/models",
+          "modelInfoFormat": "aiproxy"
+        }
+      }
+    }
+  }
+}
+```
+
+For each discovered model, the plugin reads:
+
+- `limits.max_input_tokens` → `limit.input`
+- `limits.max_output_tokens` → `limit.output`
+- `pricing.input_per_1m_usd` → `cost.input`
+- `pricing.output_per_1m_usd` → `cost.output`
+- `pricing.cache_read_per_1m_usd` → `cost.cache_read`
+
+AIProxy's prices are already USD per million tokens; they are not rescaled. Finite non-negative prices, including zero, are preserved. Missing or malformed fields do not overwrite existing catalog values. `pricing.cache_write_5m_per_1m_usd` is currently ignored because its duration-specific meaning does not map unambiguously to OpenCode's generic cache-write cost.
+
+The plugin does not infer total context by adding `max_input_tokens` and `max_output_tokens`. It updates input/output limits only when a valid context limit is already available. Models with no models.dev match therefore retain the conservative host context default in V2, and V1 leaves an incomplete limit unset.
+
+#### Reasoning effort variants
+
+AIProxy can advertise supported efforts on each model-list entry with `capabilities.reasoning` and `capabilities.effort_tiers`:
+
+```json
+{
+  "id": "gpt-6-luna",
+  "capabilities": {
+    "reasoning": true,
+    "effort_tiers": ["low", "medium", "high", "xhigh", "max"]
+  }
+}
+```
+
+Recognized effort tiers are `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`; each becomes an OpenCode variant with the same `reasoningEffort` value. Unknown values are ignored. A present `effort_tiers` list is authoritative, including an empty or unrecognized-only list, so the plugin will not invent fallback tiers in that case. If the field is absent, the AIProxy enricher adds no variants; OpenCode V2's existing low/medium/high fallback can still apply when the model is otherwise marked as reasoning. The plugin never infers `xhigh` or `max` from a model name; AIProxy must advertise them for each supported model.
+
+`modelInfoEndpoint`, when set for this format, overrides the models.dev metadata URL (default `https://models.dev/models.json`). It does not override `modelsDiscovery.endpoint`, which remains the AIProxy model-list endpoint.
 
 ### llama-swap Model Info
 
