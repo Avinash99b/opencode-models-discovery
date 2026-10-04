@@ -1,4 +1,5 @@
 import type { ModelInfoEnricher } from './types'
+import { createModelsDevModelInfoEnricher } from './models-dev'
 
 const REASONING_EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
 
@@ -28,19 +29,26 @@ function reasoningVariants(value: unknown): Record<string, { reasoningEffort: st
   return variants
 }
 
-export function createAIProxyModelInfoEnricher(_data: unknown): ModelInfoEnricher {
+export function createAIProxyModelInfoEnricher(data: unknown): ModelInfoEnricher {
+  const modelsDevEnricher = createModelsDevModelInfoEnricher(data)
+
   return {
-    shouldSkipModel(): boolean {
-      return false
+    shouldSkipModel(modelId: string): boolean {
+      return modelsDevEnricher.shouldSkipModel(modelId)
     },
-    applyModelInfo(modelConfig: any, _modelId: string, rawModel?: Record<string, unknown>): void {
+    getModelName(modelId: string, rawModel?: Record<string, unknown>): string | undefined {
+      return modelsDevEnricher.getModelName?.(modelId, rawModel)
+    },
+    applyModelInfo(modelConfig: any, modelId: string, rawModel?: Record<string, unknown>): void {
+      modelsDevEnricher.applyModelInfo(modelConfig, modelId, rawModel)
+
       const limits = object(rawModel?.limits)
       const inputLimit = limits?.max_input_tokens
       const outputLimit = limits?.max_output_tokens
-      if (positiveNumber(inputLimit) || positiveNumber(outputLimit)) {
-        const existing = object(modelConfig.limit) ?? {}
+      const existingLimit = object(modelConfig.limit)
+      if (existingLimit && positiveNumber(existingLimit.context) && (positiveNumber(inputLimit) || positiveNumber(outputLimit))) {
         modelConfig.limit = {
-          ...existing,
+          ...existingLimit,
           ...(positiveNumber(inputLimit) ? { input: inputLimit } : {}),
           ...(positiveNumber(outputLimit) ? { output: outputLimit } : {}),
         }

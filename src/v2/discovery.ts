@@ -36,7 +36,7 @@ async function resolveModelInfoEnricher(
   const format = config.modelInfoFormat
   if (!format) return undefined
 
-  if (format === ModelInfoFormat.ModelsDev) {
+  if (format === ModelInfoFormat.ModelsDev || format === ModelInfoFormat.AIProxy) {
     const endpoint = config.modelInfoEndpoint ?? DEFAULT_MODELS_DEV_URL
     const data = await fetchModelsDevData(endpoint)
     return createModelInfoEnricher(format, data, { filterNonChat: config.filterNonChat })
