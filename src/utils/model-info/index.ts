@@ -1,3 +1,4 @@
+import { createAIProxyModelInfoEnricher } from './aiproxy'
 import { createBifrostModelInfoEnricher } from './bifrost'
 import { createLiteLLMModelInfoEnricher } from './litellm'
 import { createLMStudioModelInfoEnricher } from './lmstudio'
@@ -11,6 +12,7 @@ import type { ModelInfoEnricher, ModelInfoEnricherOptions } from './types'
 type ModelInfoEnricherFactory = (data: unknown, options?: ModelInfoEnricherOptions) => ModelInfoEnricher
 
 const MODEL_INFO_ENRICHERS: Partial<Record<ModelInfoFormat, ModelInfoEnricherFactory>> = {
+  [ModelInfoFormat.AIProxy]: createAIProxyModelInfoEnricher,
   [ModelInfoFormat.Bifrost]: createBifrostModelInfoEnricher,
   [ModelInfoFormat.LiteLLM]: createLiteLLMModelInfoEnricher,
   [ModelInfoFormat.ModelsDev]: createModelsDevModelInfoEnricher,
