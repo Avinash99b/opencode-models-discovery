@@ -86,29 +86,41 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
   const providers: ConfiguredProvider[] = []
   const discovery = new Map<string, ProviderDiscoveryOptions>()
   const controller = createProviderController(ctx, providers, integrationID)
+  let transformsRegistration: Promise<void> | undefined
+
+  const ensureTransformsRegistered = async (): Promise<void> => {
+    if (!transformsRegistration) {
+      transformsRegistration = Promise.all([
+        ctx.integration.transform((draft) => {
+          for (const provider of providers) {
+            const integration = {
+              id: integrationID(provider.id),
+              name: provider.name ?? provider.id,
+            }
+            draft.update(integration.id, (current) => {
+              current.id = integration.id
+              current.name = integration.name
+            })
+            draft.method.update({
+              integrationID: integration.id,
+              method: { type: "key", label: "API key" },
+            })
+          }
+        }),
+        ctx.provider.transform(controller.transform),
+      ]).then(() => undefined)
+    }
+    await transformsRegistration
+  }
 
   const syncConfiguredProviders = async (): Promise<boolean> => {
     const configured = await configuredProviders(ctx)
-    if (configured.providers.length === 0) return false
     providers.splice(0, providers.length, ...configured.providers)
     discovery.clear()
     for (const [id, options] of configured.discovery) discovery.set(id, options)
-    const integrations = providers.map((provider) => ({ id: integrationID(provider.id), name: provider.name ?? provider.id }))
 
-    await ctx.integration.transform((draft) => {
-      for (const integration of integrations) {
-        draft.update(integration.id, (current) => {
-          current.id = integration.id
-          current.name = integration.name
-        })
-        draft.method.update({
-          integrationID: integration.id,
-          method: { type: "key", label: "API key" },
-        })
-      }
-    })
-    await ctx.provider.transform(controller.transform)
-    return true
+    await ensureTransformsRegistered()
+    return configured.providers.length > 0
   }
 
   await syncConfiguredProviders()

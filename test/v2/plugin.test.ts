@@ -208,6 +208,8 @@ describe("V2 plugin entrypoint", () => {
       await plugin.setup(ctx as never)
       await new Promise((resolve) => setTimeout(resolve, 0))
       expect(ctx.provider.reload).toHaveBeenCalledTimes(3)
+      expect(ctx.integration.transform).toHaveBeenCalledTimes(1)
+      expect(ctx.provider.transform).toHaveBeenCalledTimes(1)
       expect(fetcher).toHaveBeenNthCalledWith(1, "http://127.0.0.1:1234/v1/models", expect.any(Object))
       expect(fetcher).toHaveBeenNthCalledWith(2, "http://127.0.0.1:5678/v1/models", expect.any(Object))
     } finally {

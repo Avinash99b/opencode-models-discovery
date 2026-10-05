@@ -10,7 +10,7 @@
       },
       "devDependencies": {
         "@eslint/js": "^10.0.1",
-        "@opencode-ai/plugin": "^1.17.10",
+        "@opencode-ai/plugin": "^1.18.29",
         "@types/node": "^26.5.1",
         "@vitest/coverage-v8": "^5.0.0",
         "esbuild": "^0.28.2",
@@ -240,9 +240,9 @@
 
     "@npmcli/run-script": ["@npmcli/run-script@10.0.4", "", { "dependencies": { "@npmcli/node-gyp": "^5.0.0", "@npmcli/package-json": "^7.0.0", "@npmcli/promise-spawn": "^9.0.0", "node-gyp": "^12.1.0", "proc-log": "^6.0.0" } }, "sha512-mGUWr1uMnf0le2TwfOZY4SFxZGXGfm4Jtay/nwAa2FLNAKXUoUwaGwBMNH36UHPtinWfTSJ3nqFQr0091CxVGg=="],
 
-    "@opencode-ai/plugin": ["@opencode-ai/plugin@1.17.11", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@opencode-ai/sdk": "1.17.11", "effect": "4.0.0-beta.83", "zod": "4.1.8" }, "peerDependencies": { "@opentui/core": ">=0.3.4", "@opentui/keymap": ">=0.3.4", "@opentui/solid": ">=0.3.4" }, "optionalPeers": ["@opentui/core", "@opentui/keymap", "@opentui/solid"] }, "sha512-mE6SR1tVxL98zbZrlneqF/+dpIKLeZHKzWZy35Hq54uEnuCM1gKq3LK8F2PG2zMBDKQtz2fahEIksJ7svoPLLw=="],
+    "@opencode-ai/plugin": ["@opencode-ai/plugin@1.18.34", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@opencode-ai/sdk": "1.18.34", "effect": "4.0.0-beta.83", "zod": "4.1.8" }, "peerDependencies": { "@opentui/core": ">=0.4.5", "@opentui/keymap": ">=0.4.5", "@opentui/solid": ">=0.4.5" }, "optionalPeers": ["@opentui/core", "@opentui/keymap", "@opentui/solid"] }, "sha512-bC1EBL/QJ6LpC7liKZXr5JA+oa9qDAwTzpEgPxPsx1pbIUdhKOqg3/yoPEQgoa4YdO3hsgCWNFmbDE/DeOl/Ug=="],
 
-    "@opencode-ai/sdk": ["@opencode-ai/sdk@1.17.11", "", { "dependencies": { "cross-spawn": "7.0.6" } }, "sha512-UdSwnNM4/cD5rHnI8O7VaHuiwYnsEOglpRPVeeYE2S5Nm1K34ijCyZGDvBecb0ShdBQgn49XvyQWJH6cREsIPw=="],
+    "@opencode-ai/sdk": ["@opencode-ai/sdk@1.18.34", "", { "dependencies": { "cross-spawn": "7.0.6" } }, "sha512-R9QWUpcngtdQ6FCixz7NC6n1WsSho6CEuRUzYHz/CzZcp3miSklDzXkm0oDwXVCnuEu+ANoeM0f6RDp51kOMzQ=="],
 
     "@opencode/ai": ["@opencode/ai@2.0.14", "", { "dependencies": { "@aws-sdk/credential-providers": "3.1057.0", "@opencode/schema": "2.0.14", "@smithy/eventstream-codec": "4.2.14", "@smithy/util-utf8": "4.2.2", "aws4fetch": "1.0.20", "effect": "4.0.0-rc.112", "google-auth-library": "10.5.0" } }, "sha512-8TayJbwQyzKI+NQF/7/v0JdbVSRvdbiZRjJ3RTpV3Tbp0YwlL9M6YxtV5fPvLkOplB4b/hCiZkJ77enJN1tZeA=="],
 
