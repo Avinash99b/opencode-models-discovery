@@ -156,20 +156,28 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
   }
   void (async () => {
     try {
-      for await (const event of ctx.event.subscribe({ signal: abort.signal })) {
-        if (event.type === "config.updated") {
-          // Configuration updates are delivered independently from the provider
-          // registry. Reload the registry first so provider.list() observes the
-          // new opencode.json before rebuilding the discovery inventory.
-          await ctx.provider.reload()
-          await syncConfiguredProviders()
-          await refresh()
+      for await (const event of ctx.event.subscribe({signal: abort.signal})) {
+        if (event.type === "config.updated"){
+          try {
+            // Configuration updates are delivered independently from the provider
+            // registry. Reload the registry first so provider.list() observes the
+            // new opencode.json before rebuilding the discovery inventory.
+            await ctx.provider.reload()
+            await syncConfiguredProviders()
+            await refresh()
+          } catch {
+            if (!abort.signal.aborted) {
+              // should not happen, but if it does, we don't want to crash the plugin
+            }
+          }
         }
       }
     } catch {
-      // Event streaming is advisory; manual refresh remains available.
+      if (!abort.signal.aborted) {
+        // should not happen, but if it does, we don't want to crash the plugin
+      }
     }
-  })()
+})()
 
   return () => abort.abort()
 }
