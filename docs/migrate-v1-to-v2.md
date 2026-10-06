@@ -111,7 +111,7 @@ The following V1 behavior is not currently available in the OpenCode v2 adapter:
 - `/models-discovery:migrate`
 - V1 startup config-hook behavior
 
-OpenCode v2 uses its provider registry and keeps discovered models in the background service's in-memory inventory. The same service can reuse the inventory across sessions. When the service restarts, the plugin runs normal discovery again. Disk persistence is therefore not required for the initial v2 beta; it may be added later for offline startup or restart recovery. The v2 agent tools `models_discovery_refresh` and `models_discovery_status` are available to the agent; they are not slash commands.
+OpenCode v2 uses its provider registry and keeps discovered models in the background service's in-memory inventory. The same service can reuse the inventory across sessions. When the service restarts, the plugin runs normal discovery again. Disk persistence is therefore not required for the initial v2 beta; it may be added later for offline startup or restart recovery. The v2 agent tools `models_discovery_refresh` and `models_discovery_status` are available to the agent, and `/models-discovery-refresh` is available as a direct TUI command.
 
 ## Credentials
 

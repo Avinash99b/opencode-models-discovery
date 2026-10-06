@@ -14,7 +14,7 @@ describe("V2 discovery tools", () => {
     }, async () => ({ providers: 1, models: 2 }), () => ({ providers: 1, models: 2 }))
 
     expect(tools.map((tool) => tool.name)).toEqual(["models_discovery_refresh", "models_discovery_status"])
-    await expect(tools[0]?.execute({})).resolves.toEqual({ content: "Discovered 2 models from 1 providers." })
+    await expect(tools[0]?.execute({})).resolves.toEqual({ content: "Model discovery refreshed: discovered 2 models from 1 providers." })
     await expect(tools[1]?.execute({})).resolves.toEqual({ content: "Current discovery inventory has 2 models from 1 providers." })
   })
 })

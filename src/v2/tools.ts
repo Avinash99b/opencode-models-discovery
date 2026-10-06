@@ -3,6 +3,15 @@ export interface RefreshResult {
   readonly models: number
 }
 
+export function formatRefreshResult(result: RefreshResult): string {
+  return `Model discovery refreshed: discovered ${result.models} models from ${result.providers} providers.`
+}
+
+export function formatRefreshFailure(error: unknown): string {
+  void error
+  return "Model discovery refresh failed."
+}
+
 export interface DiscoveryToolsContext {
   readonly tool: {
     transform(callback: (tools: { add(tool: {
@@ -31,8 +40,12 @@ export async function registerDiscoveryTools(
       description: "Refresh models discovered from configured OpenAI-compatible providers.",
       input: noInput,
       execute: async () => {
-        const result = await refresh()
-        return { content: `Discovered ${result.models} models from ${result.providers} providers.` }
+        try {
+          const result = await refresh()
+          return { content: formatRefreshResult(result) }
+        } catch (error) {
+          return { content: formatRefreshFailure(error) }
+        }
       },
     })
     tools.add({
