@@ -46,6 +46,24 @@ describe('OmniRoute model info enricher', () => {
     })
   })
 
+  it('preserves context limit when max_output_tokens is absent', () => {
+    const enricher = createModelInfoEnricher(ModelInfoFormat.OmniRoute, null)
+    const config: any = {
+      id: 'oc/long-context',
+    }
+
+    enricher!.applyModelInfo(config, config.id, {
+      id: config.id,
+      context_length: 1048576,
+      max_input_tokens: 1048576,
+    })
+
+    expect(config.limit).toEqual({
+      context: 1048576,
+      input: 1048576,
+    })
+  })
+
   it('uses vision as an image-input fallback without replacing default output modalities', () => {
     const enricher = createModelInfoEnricher(ModelInfoFormat.OmniRoute, null)
     const config: any = {

@@ -55,11 +55,11 @@ export function createOmniRouteModelInfoEnricher(_data: unknown): ModelInfoEnric
       const context = rawModel?.context_length
       const inputLimit = rawModel?.max_input_tokens
       const output = rawModel?.max_output_tokens
-      if (hasUsableNumber(context) && hasUsableNumber(output)) {
+      if (hasUsableNumber(context)) {
         modelConfig.limit = {
           context,
           ...(hasUsableNumber(inputLimit) ? { input: inputLimit } : {}),
-          output,
+          ...(hasUsableNumber(output) ? { output } : {}),
         }
       }
 
