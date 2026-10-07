@@ -4,7 +4,8 @@
 [![npm downloads](https://img.shields.io/npm/dt/opencode-models-discovery.svg)](https://www.npmjs.com/package/opencode-models-discovery)
 [![release](https://github.com/yuhp/opencode-models-discovery/actions/workflows/release.yml/badge.svg)](https://github.com/yuhp/opencode-models-discovery/actions/workflows/release.yml)
 [![license](https://img.shields.io/github/license/yuhp/opencode-models-discovery)](https://github.com/yuhp/opencode-models-discovery/blob/main/LICENSE)
-[![OpenCode](https://img.shields.io/badge/OpenCode-%3E%3D1.4.0-blueviolet)](https://opencode.ai)
+[![OpenCode v1](https://img.shields.io/badge/OpenCode%20v1-%3E%3D1.18.29-blueviolet)](https://opencode.ai)
+[![OpenCode v2](https://img.shields.io/badge/OpenCode%20v2-%3E%3D2.0.14-blueviolet)](https://opencode.ai)
 
 > A universal OpenCode plugin for dynamic model discovery across any OpenAI-compatible provider.
 
@@ -41,7 +42,7 @@ Install the package from npm, then add a provider to your OpenCode v2 `opencode.
 {
   "$schema": "https://opencode.ai/config.json",
   "plugins": [
-    "opencode-models-discovery@1.6.1"
+    "opencode-models-discovery@1.8.0"
   ],
   "providers": {
     "gateway": {
@@ -69,7 +70,7 @@ Set `GATEWAY_API_KEY` in the environment used to start OpenCode; the `${GATEWAY_
 
 `modelInfoFormat` and `smartModelName` are optional: without them, discovered names remain the model IDs and no external metadata is fetched. Supported metadata formats are `models.dev`, `bifrost`, `litellm`, `vllm`, `lmstudio`, `llama-swap`, and `omniroute`. `models.dev` fetches `https://models.dev/models.json` by default; `modelInfoEndpoint` can override the URL. `filterNonChat` defaults to `true`; it can filter non-chat models when the selected metadata source supplies that information. `timeoutMs` defaults to 5000 ms. Models returned by discovery are added alongside explicitly configured models.
 
-For a local build, run `npm run compile` and replace the package value above with `"file:///absolute/path/to/opencode-models-discovery/dist"`. OpenCode v2 expects a **directory**, not a path to `index.js` or `server.js`. After rebuilding plugin code, run `opencode service restart` so the background service loads the new bundle. Discovery runs when the plugin initializes; the OpenCode v2 agent tools `models_discovery_refresh` and `models_discovery_status` can refresh or inspect the in-memory inventory during a session. These are agent tools, **not** slash commands.
+For a local build, run `npm run compile` and replace the package value above with `"file:///absolute/path/to/opencode-models-discovery/dist"`. OpenCode v2 expects a **directory**, not a path to `index.js` or `server.js`. After rebuilding plugin code, run `opencode service restart` so the background service loads the new bundle. Discovery runs when the plugin initializes; the OpenCode v2 agent tools `models_discovery_refresh` and `models_discovery_status` can refresh or inspect the in-memory inventory during a session. The V2 adapter also provides the interim `/models-discovery-refresh` Server Command; its result is currently reported through the active session, while a future release may migrate this feedback to a TUI-only toast.
 
 Because OpenCode v2 support is currently in beta, the OpenCode v2 adapter does not yet support the OpenCode v1 `modelsDiscovery.cache` disk cache, OpenCode v1 auth.json/`OPENCODE_AUTH_CONTENT` fallback, or `/models-discovery:config` and `/models-discovery:migrate` commands. See [OpenCode v2 design notes](docs/v2_prd.md) for the OpenCode v2 implementation details.
 

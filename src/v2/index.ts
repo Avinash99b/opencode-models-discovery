@@ -3,6 +3,8 @@ import { createProviderController, type ConfiguredProvider } from "./catalog.js"
 import { discoverInventory, type CatalogProvider } from "./discovery.js"
 import { parseProviderDiscoveryOptions, type ProviderDiscoveryOptions } from "./provider-config.js"
 import { registerDiscoveryTools } from "./tools.js"
+import { registerRefreshCommand } from "./commands.js"
+import type { RefreshResult } from "./tools.js"
 
 const integrationPrefix = "opencode.models-discovery"
 
@@ -86,57 +88,77 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
   const providers: ConfiguredProvider[] = []
   const discovery = new Map<string, ProviderDiscoveryOptions>()
   const controller = createProviderController(ctx, providers, integrationID)
+  let transformsRegistration: Promise<void> | undefined
+
+  const ensureTransformsRegistered = async (): Promise<void> => {
+    if (!transformsRegistration) {
+      transformsRegistration = Promise.all([
+        ctx.integration.transform((draft) => {
+          for (const provider of providers) {
+            const integration = {
+              id: integrationID(provider.id),
+              name: provider.name ?? provider.id,
+            }
+            draft.update(integration.id, (current) => {
+              current.id = integration.id
+              current.name = integration.name
+            })
+            draft.method.update({
+              integrationID: integration.id,
+              method: { type: "key", label: "API key" },
+            })
+          }
+        }),
+        ctx.provider.transform(controller.transform),
+      ]).then(() => undefined)
+    }
+    await transformsRegistration
+  }
 
   const syncConfiguredProviders = async (): Promise<boolean> => {
     const configured = await configuredProviders(ctx)
-    if (configured.providers.length === 0) return false
     providers.splice(0, providers.length, ...configured.providers)
     discovery.clear()
     for (const [id, options] of configured.discovery) discovery.set(id, options)
-    const integrations = providers.map((provider) => ({ id: integrationID(provider.id), name: provider.name ?? provider.id }))
 
-    await ctx.integration.transform((draft) => {
-      for (const integration of integrations) {
-        draft.update(integration.id, (current) => {
-          current.id = integration.id
-          current.name = integration.name
-        })
-        draft.method.update({
-          integrationID: integration.id,
-          method: { type: "key", label: "API key" },
-        })
-      }
-    })
-    await ctx.provider.transform(controller.transform)
-    return true
+    await ensureTransformsRegistered()
+    return configured.providers.length > 0
   }
 
-  await syncConfiguredProviders()
+  const refreshInventoryInternal = async (): Promise<RefreshResult> => {
+    const integrations = providers.map((provider) => integrationID(provider.id))
+    if (integrations.length > 0) await ctx.integration.reload()
+    const resolved = await resolveProviderCredentials(ctx, providers)
+    const inventory = await discoverInventory(resolved, discovery)
+    await controller.replaceInventory(inventory)
+    return controller.status()
+  }
 
-  let refreshChain = Promise.resolve()
-  const refresh = () => {
-    const run = refreshChain.then(async () => {
-      const integrations = providers.map((provider) => integrationID(provider.id))
-      if (integrations.length > 0) await ctx.integration.reload()
-      const resolved = await resolveProviderCredentials(ctx, providers)
-      const inventory = await discoverInventory(resolved, discovery)
-      await controller.replaceInventory(inventory)
-      return controller.status()
-    })
-    refreshChain = run.then(() => undefined, () => undefined)
+  let operationChain = Promise.resolve()
+  const enqueue = <T>(operation: () => Promise<T>): Promise<T> => {
+    const run = operationChain.then(operation)
+    operationChain = run.then(() => undefined, () => undefined)
     return run
   }
 
-  await registerDiscoveryTools(ctx, refresh, controller.status)
-  await refresh()
+  const refreshFromCurrentConfig = (): Promise<RefreshResult> => enqueue(async () => {
+    await ctx.provider.reload()
+    await syncConfiguredProviders()
+    return refreshInventoryInternal()
+  })
+
+  await ensureTransformsRegistered()
+  await registerDiscoveryTools(ctx, refreshFromCurrentConfig, controller.status)
+  await registerRefreshCommand(ctx, refreshFromCurrentConfig)
+  await refreshFromCurrentConfig()
 
   const abort = new AbortController()
   if (providers.length === 0) {
     void (async () => {
       for (let attempt = 0; attempt < 10 && !abort.signal.aborted; attempt++) {
         await new Promise((resolve) => setTimeout(resolve, 250))
-        if (await syncConfiguredProviders()) {
-          await refresh()
+        const result = await refreshFromCurrentConfig()
+        if (result.providers > 0) {
           break
         }
       }
@@ -144,20 +166,26 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
   }
   void (async () => {
     try {
-      for await (const event of ctx.event.subscribe({ signal: abort.signal })) {
-        if (event.type === "config.updated") {
-          // Configuration updates are delivered independently from the provider
-          // registry. Reload the registry first so provider.list() observes the
-          // new opencode.json before rebuilding the discovery inventory.
-          await ctx.provider.reload()
-          await syncConfiguredProviders()
-          await refresh()
+      for await (const event of ctx.event.subscribe({signal: abort.signal})) {
+        if (event.type === "config.updated"){
+          try {
+            // Configuration updates are delivered independently from the provider
+            // registry. Reload the registry first so provider.list() observes the
+            // new opencode.json before rebuilding the discovery inventory.
+            await refreshFromCurrentConfig()
+          } catch {
+            if (!abort.signal.aborted) {
+              // should not happen, but if it does, we don't want to crash the plugin
+            }
+          }
         }
       }
     } catch {
-      // Event streaming is advisory; manual refresh remains available.
+      if (!abort.signal.aborted) {
+        // should not happen, but if it does, we don't want to crash the plugin
+      }
     }
-  })()
+})()
 
   return () => abort.abort()
 }

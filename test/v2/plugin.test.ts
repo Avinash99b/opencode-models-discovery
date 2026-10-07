@@ -22,6 +22,9 @@ function context(overrides: Record<string, unknown> = {}) {
   })
   const integrationReload = vi.fn().mockResolvedValue(undefined)
   const toolTransform = vi.fn().mockImplementation(async (callback) => callback({ add: vi.fn() }))
+  const commandTransform = vi.fn().mockImplementation(async (callback) => callback({ add: vi.fn() }))
+  const commandReload = vi.fn().mockResolvedValue(undefined)
+  const synthetic = vi.fn().mockResolvedValue(undefined)
   return {
     app: { version: "2.0.14" },
     options: {
@@ -49,6 +52,8 @@ function context(overrides: Record<string, unknown> = {}) {
     },
     event: closedEvents(),
     tool: { transform: toolTransform },
+    command: { transform: commandTransform, reload: commandReload },
+    session: { synthetic },
     ...overrides,
   }
 }
@@ -65,9 +70,40 @@ describe("V2 plugin entrypoint", () => {
       await plugin.setup(ctx as never)
       expect(ctx.integration.transform).toHaveBeenCalledTimes(1)
       expect(ctx.provider.transform).toHaveBeenCalledTimes(1)
+      expect(ctx.command.transform).toHaveBeenCalledTimes(1)
+      expect(ctx.command.reload).toHaveBeenCalledTimes(1)
       expect(ctx.integration.reload).toHaveBeenCalledTimes(1)
-      expect(ctx.provider.reload).toHaveBeenCalledTimes(1)
+      expect(ctx.provider.reload).toHaveBeenCalledTimes(2)
       expect(fetcher).toHaveBeenCalledTimes(1)
+    } finally {
+      fetcher.mockRestore()
+    }
+  })
+
+  it("registers and executes the manual refresh command", async () => {
+    const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "discovered-model" }] }),
+    } as Response)
+    const commands: Array<{ name: string; description: string; execute(input: { sessionID: string }): Promise<void> }> = []
+    const ctx = context({
+      command: {
+        transform: vi.fn().mockImplementation(async (callback) => callback({ add: (command: typeof commands[number]) => commands.push(command) })),
+        reload: vi.fn().mockResolvedValue(undefined),
+      },
+    })
+
+    try {
+      await plugin.setup(ctx as never)
+      const command = commands.find((entry) => entry.name === "models-discovery-refresh")
+      expect(command?.description).toBe("Refresh models discovered from configured providers.")
+      await command?.execute({ sessionID: "session-1" })
+      expect(ctx.session.synthetic).toHaveBeenCalledWith({
+        sessionID: "session-1",
+        text: "Model discovery refreshed: discovered 1 models from 1 providers.",
+      })
+      expect(ctx.command.transform).toHaveBeenCalledTimes(1)
+      expect(ctx.command.reload).toHaveBeenCalledTimes(1)
     } finally {
       fetcher.mockRestore()
     }
@@ -180,6 +216,7 @@ describe("V2 plugin entrypoint", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [{ id: "initial-model" }] }) } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [{ id: "updated-model" }] }) } as Response)
     let currentBaseURL = "http://127.0.0.1:1234/v1"
+    let providerReloads = 0
     const events = {
       subscribe: vi.fn().mockReturnValue((async function* () {
         yield { type: "config.updated" }
@@ -190,7 +227,10 @@ describe("V2 plugin entrypoint", () => {
       provider: {
         transform: vi.fn().mockImplementation(async (callback) => callback({ get: vi.fn().mockReturnValue(undefined), add: vi.fn(), update: vi.fn(), models: { set: vi.fn() } })),
         reload: vi.fn().mockImplementation(async () => {
-          currentBaseURL = "http://127.0.0.1:5678/v1"
+          providerReloads += 1
+          if (providerReloads >= 3) {
+            currentBaseURL = "http://127.0.0.1:5678/v1"
+          }
         }),
         list: vi.fn().mockImplementation(async () => ({ data: [{
           id: "local",
@@ -207,7 +247,9 @@ describe("V2 plugin entrypoint", () => {
     try {
       await plugin.setup(ctx as never)
       await new Promise((resolve) => setTimeout(resolve, 0))
-      expect(ctx.provider.reload).toHaveBeenCalledTimes(3)
+      expect(ctx.provider.reload).toHaveBeenCalledTimes(4)
+      expect(ctx.integration.transform).toHaveBeenCalledTimes(1)
+      expect(ctx.provider.transform).toHaveBeenCalledTimes(1)
       expect(fetcher).toHaveBeenNthCalledWith(1, "http://127.0.0.1:1234/v1/models", expect.any(Object))
       expect(fetcher).toHaveBeenNthCalledWith(2, "http://127.0.0.1:5678/v1/models", expect.any(Object))
     } finally {

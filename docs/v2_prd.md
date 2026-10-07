@@ -31,7 +31,7 @@ OpenCode v2 can translate some existing v1-shaped `opencode.json(c)` files in me
 - Reading v1 OpenCode or Mimocode `auth.json` files directly.
 - Mimocode support.
 - V1 legacy global configuration detection, migration toast, or `/models-discovery:migrate`.
-- Dynamic slash-command creation. The documented V2 command transform currently supports updating and removing commands, not adding new commands.
+- Dynamic slash-command creation was initially out of scope; the V2 adapter now registers `/models-discovery-refresh` through the Command transform API.
 - Automatically writing command templates or configuration into a project or global OpenCode directory.
 - Publishing OpenCode v2 support as stable before beta validation is complete.
 
