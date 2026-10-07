@@ -1,54 +1,16 @@
 import { type DiscoveredV2Model } from "./catalog.js"
 import { type ProviderDiscoveryOptions } from "./provider-config.js"
-import { resolveModelDisplayName } from "../core/model-naming.js"
-import { adaptLegacyModelInfoEnricher, enrichModelDraft } from "../core/model-enrichment.js"
 import type { DiscoveredModelDraft } from "../core/model-types.js"
-import type { ModelInfoEnricher } from "../utils/model-info/types.js"
-import type { ModelEnricher } from "../core/model-enrichment.js"
-
-export interface RawOpenAIModel {
-  readonly id: string
-  readonly [key: string]: unknown
-}
 
 export function mapToDiscoveredV2Model(
-  model: RawOpenAIModel | DiscoveredModelDraft,
+  draft: DiscoveredModelDraft,
   options: ProviderDiscoveryOptions,
-  enricher?: ModelInfoEnricher | ModelEnricher,
 ): DiscoveredV2Model {
-  const isDraft = 'raw' in model
-  const enrichedResult = isDraft && model.raw && typeof model.raw === 'object'
-    ? { draft: model as DiscoveredModelDraft, metadataName: undefined }
-    : (() => {
-        const draft: DiscoveredModelDraft = {
-          id: model.id,
-          name: model.id,
-          raw: model as RawOpenAIModel,
-          capabilities: {
-            tools: true,
-            input: ["text"],
-            output: ["text"],
-          },
-          limit: {
-            context: 200_000,
-            output: 32_000,
-          },
-        }
-        const neutralEnricher = enricher && 'enrich' in enricher
-          ? enricher
-          : enricher ? adaptLegacyModelInfoEnricher(enricher) : undefined
-        const enriched = enrichModelDraft(draft, neutralEnricher)
-        return { draft: enriched.draft, metadataName: enriched.metadataName }
-      })()
-  const resultDraft = enrichedResult.draft
+  const resultDraft = draft
   const rawModel = resultDraft.raw
 
   // Map to V2 Model.Info shape
-  const name = options.smartModelName
-    ? (enrichedResult.metadataName
-      ? resolveModelDisplayName(rawModel, true, enrichedResult.metadataName)
-      : (isDraft ? resultDraft.name : resolveModelDisplayName(rawModel, true)))
-    : resultDraft.id
+  const name = options.smartModelName ? resultDraft.name : resultDraft.id
 
   // Capabilities mapping
   const capabilities: Record<string, unknown> = {
