@@ -3,14 +3,15 @@ import { enrichModelDraft } from './model-enrichment'
 import { matchesModelFilter, type ModelFilter } from './model-filter'
 import { disambiguateModelNames, resolveModelDisplayName } from './model-naming'
 import { normalizeDiscoveredRawModel, type DiscoveredModelDraft, type DiscoveredRawModel } from './model-types'
-import type { ModelInfoEnricher } from '../utils/model-info/types'
+import type { ModelEnricher, ModelEnrichmentContext } from './model-enrichment'
 
 export type ModelClassification = 'chat' | 'embedding' | 'unknown'
 
 export interface DiscoveryPipelineOptions {
   readonly filter: ModelFilter
   readonly smartModelName: boolean
-  readonly enricher?: ModelInfoEnricher
+  readonly enricher?: ModelEnricher
+  readonly enrichmentContext?: ModelEnrichmentContext
   readonly classify?: (model: DiscoveredRawModel) => ModelClassification
 }
 
@@ -48,7 +49,7 @@ export function discoverModelDrafts(
     const classification = classify(model)
     if (classification === 'embedding') continue
 
-    const enriched = enrichModelDraft(createInitialDraft(model, classification), options.enricher)
+    const enriched = enrichModelDraft(createInitialDraft(model, classification), options.enricher, options.enrichmentContext)
     if (enriched.skipped) continue
 
     drafts.push({

@@ -1,8 +1,10 @@
 import { type DiscoveredV2Model } from "./catalog.js"
 import { type ProviderDiscoveryOptions } from "./provider-config.js"
 import { resolveModelDisplayName } from "../core/model-naming.js"
-import { enrichModelDraft } from "../core/model-enrichment.js"
+import { adaptLegacyModelInfoEnricher, enrichModelDraft } from "../core/model-enrichment.js"
 import type { DiscoveredModelDraft } from "../core/model-types.js"
+import type { ModelInfoEnricher } from "../utils/model-info/types.js"
+import type { ModelEnricher } from "../core/model-enrichment.js"
 
 export interface RawOpenAIModel {
   readonly id: string
@@ -12,7 +14,7 @@ export interface RawOpenAIModel {
 export function mapToDiscoveredV2Model(
   model: RawOpenAIModel | DiscoveredModelDraft,
   options: ProviderDiscoveryOptions,
-  enricher?: import("../utils/model-info/types.js").ModelInfoEnricher,
+  enricher?: ModelInfoEnricher | ModelEnricher,
 ): DiscoveredV2Model {
   const isDraft = 'raw' in model
   const enrichedResult = isDraft && model.raw && typeof model.raw === 'object'
@@ -32,7 +34,10 @@ export function mapToDiscoveredV2Model(
             output: 32_000,
           },
         }
-        const enriched = enrichModelDraft(draft, enricher)
+        const neutralEnricher = enricher && 'enrich' in enricher
+          ? enricher
+          : enricher ? adaptLegacyModelInfoEnricher(enricher) : undefined
+        const enriched = enrichModelDraft(draft, neutralEnricher)
         return { draft: enriched.draft, metadataName: enriched.metadataName }
       })()
   const resultDraft = enrichedResult.draft

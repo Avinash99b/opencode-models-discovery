@@ -1,7 +1,7 @@
 import { type ConfiguredProvider, type DiscoveredV2Model, type Inventory } from "./catalog.js"
 import { type ProviderDiscoveryOptions } from "./provider-config.js"
 import { mapToDiscoveredV2Model } from "./model-mapper.js"
-import { createModelInfoEnricher, type ModelInfoEnricher } from "../utils/model-info/index.js"
+import { createModelEnricher, type ModelEnricher } from "../utils/model-info/index.js"
 import { ModelInfoFormat } from "../types/plugin-config.js"
 import { fetchModelsDevData, DEFAULT_MODELS_DEV_URL } from "../utils/models-dev-fetcher.js"
 import { discoverModelDrafts } from "../core/discovery-pipeline.js"
@@ -19,14 +19,14 @@ async function resolveModelInfoEnricher(
   apiKey: string | undefined,
   config: ProviderDiscoveryOptions,
   fetcher: typeof fetch,
-): Promise<ModelInfoEnricher | undefined> {
+): Promise<ModelEnricher | undefined> {
   const format = config.modelInfoFormat
   if (!format) return undefined
 
   if (format === ModelInfoFormat.ModelsDev) {
     const endpoint = config.modelInfoEndpoint ?? DEFAULT_MODELS_DEV_URL
     const data = await fetchModelsDevData(endpoint)
-    return createModelInfoEnricher(format, data, { filterNonChat: config.filterNonChat })
+    return createModelEnricher(format, data, { filterNonChat: config.filterNonChat })
   }
 
   if (
@@ -35,7 +35,7 @@ async function resolveModelInfoEnricher(
     format === ModelInfoFormat.LlamaSwap ||
     format === ModelInfoFormat.OmniRoute
   ) {
-    return createModelInfoEnricher(format, null)
+    return createModelEnricher(format, null)
   }
 
   if (format === ModelInfoFormat.LiteLLM || format === ModelInfoFormat.LMStudio) {
@@ -57,7 +57,7 @@ async function resolveModelInfoEnricher(
       })
       if (res.ok) {
         const data = await res.json()
-        return createModelInfoEnricher(format, data, { filterNonChat: config.filterNonChat })
+        return createModelEnricher(format, data, { filterNonChat: config.filterNonChat })
       }
     } catch {
       // Endpoint query failed; fallback without enricher
@@ -112,6 +112,7 @@ export async function discoverInventory(
          },
          smartModelName: config.smartModelName,
          enricher,
+         enrichmentContext: { filterNonChat: config.filterNonChat },
        })
        const models = new Map<string, DiscoveredV2Model>(drafts.map((draft) => [draft.id, mapToDiscoveredV2Model(draft, config)]))
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { mapToDiscoveredV2Model } from "../../src/v2/model-mapper.js"
 import { parseProviderDiscoveryOptions } from "../../src/v2/provider-config.js"
-import { createModelInfoEnricher } from "../../src/utils/model-info/index.js"
+import { createModelInfoEnricher, createModelEnricher } from "../../src/utils/model-info/index.js"
 import { ModelInfoFormat } from "../../src/types/plugin-config.js"
 
 describe("V2 model-mapper", () => {
@@ -46,7 +46,7 @@ describe("V2 model-mapper", () => {
       smartModelName: true,
       modelInfoFormat: ModelInfoFormat.Bifrost,
     })!
-    const enricher = createModelInfoEnricher(ModelInfoFormat.Bifrost, null)
+    const enricher = createModelEnricher(ModelInfoFormat.Bifrost, null)
 
     const raw = {
       id: "bifrost-model",
@@ -72,7 +72,7 @@ describe("V2 model-mapper", () => {
       enabled: true,
       modelInfoFormat: ModelInfoFormat.VLLM,
     })!
-    const enricher = createModelInfoEnricher(ModelInfoFormat.VLLM, null)
+    const enricher = createModelEnricher(ModelInfoFormat.VLLM, null)
 
     const raw = {
       id: "qwen-2.5-72b",
@@ -105,7 +105,7 @@ describe("V2 model-mapper", () => {
         },
       }],
     }
-    const enricher = createModelInfoEnricher(ModelInfoFormat.LiteLLM, litellmData, { filterNonChat: true })
+    const enricher = createModelEnricher(ModelInfoFormat.LiteLLM, litellmData, { filterNonChat: true })
 
     const raw = { id: "custom-litellm" }
     const mapped = mapToDiscoveredV2Model(raw, options, enricher)
@@ -134,10 +134,10 @@ describe("V2 model-mapper", () => {
         { model_name: "embed-model", model_info: { mode: "embedding" } },
       ],
     }
-    const enricher = createModelInfoEnricher(ModelInfoFormat.LiteLLM, litellmData, { filterNonChat: true })
+    const enricher = createModelEnricher(ModelInfoFormat.LiteLLM, litellmData, { filterNonChat: true })
 
-    expect(enricher?.shouldSkipModel("chat-model")).toBe(false)
-    expect(enricher?.shouldSkipModel("embed-model")).toBe(true)
+    expect(enricher?.enrich({ id: "chat-model" }, { filterNonChat: true })).toEqual({})
+    expect(enricher?.enrich({ id: "embed-model" }, { filterNonChat: true })).toEqual({ skip: true })
   })
 
   it("converts variants and configures compatibility.reasoningField for thinking models", () => {
@@ -158,7 +158,7 @@ describe("V2 model-mapper", () => {
         },
       }],
     }
-    const enricher = createModelInfoEnricher(ModelInfoFormat.LiteLLM, litellmData, { filterNonChat: true })
+    const enricher = createModelEnricher(ModelInfoFormat.LiteLLM, litellmData, { filterNonChat: true })
 
     const raw = { id: "deepseek-reasoner" }
     const mapped = mapToDiscoveredV2Model(raw, options, enricher)

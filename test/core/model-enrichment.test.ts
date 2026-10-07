@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { enrichModelDraft } from '../../src/core/model-enrichment'
+import { adaptLegacyModelInfoEnricher } from '../../src/core/model-enrichment'
 
 describe('shared model enrichment contract', () => {
   it('adapts legacy enricher output into a neutral draft', () => {
@@ -9,7 +10,7 @@ describe('shared model enrichment contract', () => {
       raw: { id: 'provider/model' },
       capabilities: { tools: true },
       limit: { context: 100 },
-    }, {
+    }, adaptLegacyModelInfoEnricher({
       shouldSkipModel: () => false,
       getModelName: () => 'Readable Model',
       applyModelInfo: (config) => {
@@ -18,7 +19,7 @@ describe('shared model enrichment contract', () => {
         config.cost = { input: 1, output: 2 }
         config.modalities = { input: ['text', 'image'] }
       },
-    })
+    }))
 
     expect(result.skipped).toBe(false)
     expect(result.metadataName).toBe('Readable Model')
@@ -30,10 +31,10 @@ describe('shared model enrichment contract', () => {
 
   it('preserves skip decisions without applying enrichment', () => {
     let applied = false
-    const result = enrichModelDraft({ id: 'skip-me', name: 'skip-me', raw: { id: 'skip-me' } }, {
+    const result = enrichModelDraft({ id: 'skip-me', name: 'skip-me', raw: { id: 'skip-me' } }, adaptLegacyModelInfoEnricher({
       shouldSkipModel: () => true,
       applyModelInfo: () => { applied = true },
-    })
+    }))
 
     expect(result.skipped).toBe(true)
     expect(applied).toBe(false)

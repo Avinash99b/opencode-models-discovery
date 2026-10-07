@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { discoverModelDrafts } from '../../src/core/discovery-pipeline'
 import { mapToDiscoveredV2Model } from '../../src/v2/model-mapper'
 import type { ProviderDiscoveryOptions } from '../../src/v2/provider-config'
+import { createModelsDevEnricher } from '../../src/utils/model-info/models-dev'
+import { createBifrostEnricher } from '../../src/utils/model-info/bifrost'
+import { createVLLMEnricher } from '../../src/utils/model-info/vllm'
+import { createLlamaSwapEnricher } from '../../src/utils/model-info/llamaswap'
+import { createOmniRouteEnricher } from '../../src/utils/model-info/omniroute'
+import { createLMStudioEnricher } from '../../src/utils/model-info/lmstudio'
 
 const options: ProviderDiscoveryOptions = {
   enabled: true,
@@ -52,5 +58,158 @@ describe('V1/V2 shared-core parity', () => {
 
     expect(drafts[0]).toMatchObject({ id: 'openai/gpt-5', name: 'openai/gpt-5' })
     expect(mapped).toMatchObject({ id: 'openai/gpt-5', modelID: 'openai/gpt-5', name: 'openai/gpt-5' })
+  })
+
+  it('keeps native models.dev enrichment equivalent for V1 drafts and V2 models', () => {
+    const enricher = createModelsDevEnricher(new Map([
+      ['openai/gpt-5', {
+        id: 'openai/gpt-5',
+        name: 'GPT 5',
+        reasoning: true,
+        tool_call: true,
+        modalities: { input: ['text', 'image'], output: ['text'] },
+        limit: { context: 128_000, output: 16_384 },
+      }],
+    ]))
+    const drafts = discoverModelDrafts([{ id: 'openai/gpt-5' }], {
+      filter: { includeBy: [], excludeBy: [], includeRegex: [], excludeRegex: [] },
+      smartModelName: true,
+      enricher,
+      enrichmentContext: { filterNonChat: true },
+    })
+    const draft = drafts[0]!
+    const mapped = mapToDiscoveredV2Model(draft, options)
+
+    expect({
+      id: draft.id,
+      name: draft.name,
+      limit: draft.limit,
+      modalities: draft.modalities,
+      reasoning: draft.reasoning,
+      toolCall: draft.toolCall,
+    }).toEqual({
+      id: mapped.modelID,
+      name: mapped.name,
+      limit: { context: 128_000, output: 16_384 },
+      modalities: { input: ['text', 'image'], output: ['text'] },
+      reasoning: true,
+      toolCall: mapped.capabilities.tools,
+    })
+  })
+
+  it('keeps native Bifrost enrichment equivalent for V1 drafts and V2 models', () => {
+    const enricher = createBifrostEnricher(null)
+    const drafts = discoverModelDrafts([{
+      id: 'bedrock/claude-sonnet',
+      context_length: 200_000,
+      max_input_tokens: 200_000,
+      max_output_tokens: 8_192,
+      normalized_name: 'Claude Sonnet',
+      architecture: { input_modalities: ['TEXT', 'IMAGE', 'SPEECH'], output_modalities: ['TEXT'] },
+      pricing: { prompt: '0.000003', completion: '0.000015' },
+    }], {
+      filter: { includeBy: [], excludeBy: [], includeRegex: [], excludeRegex: [] },
+      smartModelName: true,
+      enricher,
+      enrichmentContext: { filterNonChat: true },
+    })
+    const draft = drafts[0]!
+    const mapped = mapToDiscoveredV2Model(draft, options)
+
+    expect(draft.name).toBe('Claude Sonnet')
+    expect(draft.limit).toEqual({ context: 200_000, input: 200_000, output: 8_192 })
+    expect(draft.modalities).toEqual({ input: ['text', 'image', 'audio'], output: ['text'] })
+    expect(draft.cost).toEqual({ input: 3, output: 15 })
+    expect(mapped.name).toBe(draft.name)
+    expect(mapped.limit).toEqual(draft.limit)
+    expect(mapped.capabilities.input).toEqual(draft.modalities?.input)
+    expect(mapped.cost).toEqual([{ input: 3, output: 15, cache: { read: 0, write: 0 } }])
+  })
+
+  it('keeps native vLLM limits equivalent for V1 drafts and V2 models', () => {
+    const drafts = discoverModelDrafts([{ id: 'vllm/model', max_model_len: 32_768 }], {
+      filter: { includeBy: [], excludeBy: [], includeRegex: [], excludeRegex: [] },
+      smartModelName: true,
+      enricher: createVLLMEnricher(null),
+      enrichmentContext: { filterNonChat: true },
+    })
+    const draft = drafts[0]!
+    const mapped = mapToDiscoveredV2Model(draft, options)
+
+    expect(draft.limit).toEqual({ context: 32_768, output: 32_768 })
+    expect(mapped.limit).toEqual(draft.limit)
+  })
+
+  it('keeps native llama-swap enrichment equivalent for V1 drafts and V2 models', () => {
+    const drafts = discoverModelDrafts([{
+      id: 'llama-swap/gemma',
+      name: 'Gemma',
+      meta: { n_ctx: 16_384, llamaswap: { max_output_tokens: 2_048 } },
+      supported_parameters: ['tools'],
+    }], {
+      filter: { includeBy: [], excludeBy: [], includeRegex: [], excludeRegex: [] },
+      smartModelName: true,
+      enricher: createLlamaSwapEnricher(null),
+      enrichmentContext: { filterNonChat: true },
+    })
+    const draft = drafts[0]!
+    const mapped = mapToDiscoveredV2Model(draft, options)
+
+    expect(draft.name).toBe('Gemma')
+    expect(draft.limit).toEqual({ context: 16_384, output: 2_048 })
+    expect(draft.toolCall).toBe(true)
+    expect(mapped.name).toBe('Gemma')
+    expect(mapped.limit).toEqual(draft.limit)
+    expect(mapped.capabilities.tools).toBe(true)
+  })
+
+  it('keeps native OmniRoute enrichment equivalent for V1 drafts and V2 models', () => {
+    const drafts = discoverModelDrafts([{
+      id: 'omniroute/vision',
+      input_modalities: ['text', 'image'],
+      capabilities: { reasoning: true, tool_calling: true, effort_tiers: ['low', 'high'] },
+      context_length: 64_000,
+      max_output_tokens: 4_096,
+    }], {
+      filter: { includeBy: [], excludeBy: [], includeRegex: [], excludeRegex: [] },
+      smartModelName: true,
+      enricher: createOmniRouteEnricher(null),
+      enrichmentContext: { filterNonChat: true },
+    })
+    const draft = drafts[0]!
+    const mapped = mapToDiscoveredV2Model(draft, options)
+
+    expect(draft.limit).toEqual({ context: 64_000, output: 4_096 })
+    expect(draft.toolCall).toBe(true)
+    expect(draft.reasoning).toBe(true)
+    expect(mapped.limit).toEqual(draft.limit)
+    expect(mapped.capabilities.tools).toBe(true)
+    expect(mapped.reasoning).toBe(true)
+  })
+
+  it('keeps native LM Studio enrichment equivalent for V1 drafts and V2 models', () => {
+    const enricher = createLMStudioEnricher({ models: [{
+      key: 'lmstudio/gemma',
+      display_name: 'Gemma Local',
+      max_context_length: 8192,
+      capabilities: { vision: true, trained_for_tool_use: true },
+    }] })
+    const drafts = discoverModelDrafts([{ id: 'lmstudio/gemma' }], {
+      filter: { includeBy: [], excludeBy: [], includeRegex: [], excludeRegex: [] },
+      smartModelName: true,
+      enricher,
+      enrichmentContext: { filterNonChat: true },
+    })
+    const draft = drafts[0]!
+    const mapped = mapToDiscoveredV2Model(draft, options)
+
+    expect(draft.name).toBe('Gemma Local')
+    expect(draft.limit).toEqual({ context: 8192, output: 0 })
+    expect(draft.modalities).toEqual({ input: ['text', 'image'], output: ['text'] })
+    expect(draft.toolCall).toBe(true)
+    expect(mapped.name).toBe('Gemma Local')
+    expect(mapped.limit).toEqual({ context: 8192, output: 32000 })
+    expect(mapped.capabilities.input).toEqual(['text', 'image'])
+    expect(mapped.capabilities.tools).toBe(true)
   })
 })

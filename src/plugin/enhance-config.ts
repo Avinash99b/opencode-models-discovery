@@ -3,7 +3,7 @@ import path from 'node:path'
 import { xdgData } from 'xdg-basedir'
 import { ToastNotifier } from '../ui/toast-notifier'
 import { normalizeProviderOriginForCache, discoverModelsFromProvider, discoverModelInfoFromProvider, canDiscoverModels, isValidModel, DEFAULT_REQUEST_TIMEOUT_MS } from '../utils/openai-compatible-api'
-import { createModelInfoEnricher, isSupportedModelInfoFormat, type ModelInfoEnricher } from '../utils/model-info'
+import { createModelEnricher, isSupportedModelInfoFormat, type ModelEnricher } from '../utils/model-info'
 import { DEFAULT_CACHE_TTL_SECONDS, getDefaultDiscoveryConfigFromEnv, getProviderModelFieldFilters, getProviderModelRegexFilter, shouldDiscoverProviderWithOverride, ModelInfoFormat } from '../types/plugin-config'
 import { DEFAULT_MODELS_DEV_URL, fetchModelsDevData } from '../utils/models-dev-fetcher'
 import { isInventoryFresh, mergeModelOverride, ProviderModelStore, type ProviderModelState } from './provider-model-store'
@@ -289,7 +289,7 @@ export async function enhanceConfig(
         models = discovery.models.filter(isValidModel)
       }
 
-      let modelInfoEnricher: ModelInfoEnricher | undefined
+      let modelInfoEnricher: ModelEnricher | undefined
       if (!usingPersistedModels && modelInfoFormat && !isSupportedModelInfoFormat(modelInfoFormat)) {
         logger.warn('Unsupported provider model info format', {
           provider: providerName,
@@ -298,19 +298,19 @@ export async function enhanceConfig(
       } else if (!usingPersistedModels && modelInfoFormat === ModelInfoFormat.ModelsDev) {
         const modelInfoEndpoint = providerDiscoveryConfig.modelInfoEndpoint ?? DEFAULT_MODELS_DEV_URL
         const modelsDevCache = await fetchModelsDevData(modelInfoEndpoint)
-        modelInfoEnricher = createModelInfoEnricher(modelInfoFormat, modelsDevCache, { filterNonChat })
+        modelInfoEnricher = createModelEnricher(modelInfoFormat, modelsDevCache, { filterNonChat })
         logger.info('Loaded models.dev data', {
           provider: providerName,
           endpoint: modelInfoEndpoint,
           count: modelsDevCache.size,
         })
       } else if (!usingPersistedModels && (modelInfoFormat === ModelInfoFormat.Bifrost || modelInfoFormat === ModelInfoFormat.LlamaSwap || modelInfoFormat === ModelInfoFormat.OmniRoute || modelInfoFormat === ModelInfoFormat.VLLM)) {
-        modelInfoEnricher = createModelInfoEnricher(modelInfoFormat, null)
+        modelInfoEnricher = createModelEnricher(modelInfoFormat, null)
       } else if (!usingPersistedModels && modelInfoFormat === ModelInfoFormat.LMStudio) {
         const modelInfoEndpoint = providerDiscoveryConfig.modelInfoEndpoint ?? DEFAULT_LMSTUDIO_MODELS_ENDPOINT
         const modelInfoDiscovery = await discoverModelInfoFromProvider(baseURL, apiKey, modelInfoEndpoint, timeoutMs)
         if (modelInfoDiscovery.ok) {
-          modelInfoEnricher = createModelInfoEnricher(modelInfoFormat, modelInfoDiscovery.data)
+          modelInfoEnricher = createModelEnricher(modelInfoFormat, modelInfoDiscovery.data)
         } else {
           logger.warn('Provider model info discovery failed', {
             provider: providerName,
@@ -323,7 +323,7 @@ export async function enhanceConfig(
         const modelInfoEndpoint = providerDiscoveryConfig.modelInfoEndpoint ?? DEFAULT_LITELLM_MODEL_INFO_ENDPOINT
         const modelInfoDiscovery = await discoverModelInfoFromProvider(baseURL, apiKey, modelInfoEndpoint, timeoutMs)
         if (modelInfoDiscovery.ok) {
-          modelInfoEnricher = createModelInfoEnricher(modelInfoFormat, modelInfoDiscovery.data, { filterNonChat })
+          modelInfoEnricher = createModelEnricher(modelInfoFormat, modelInfoDiscovery.data, { filterNonChat })
         } else {
           logger.warn('Provider model info discovery failed', {
             provider: providerName,
@@ -351,6 +351,7 @@ export async function enhanceConfig(
           },
           smartModelName: smartModelNameEnabled,
           enricher: modelInfoEnricher,
+          enrichmentContext: { filterNonChat },
         })
         for (const draft of drafts) {
           const modelConfig: any = {

@@ -1,4 +1,4 @@
-import type { ModelInfoEnricher } from './types'
+import type { ModelEnricher } from '../../core/model-enrichment'
 
 function hasUsableNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -29,50 +29,52 @@ function getModalities(value: unknown): string[] | undefined {
   return modalities.length > 0 ? modalities : undefined
 }
 
-export function createBifrostModelInfoEnricher(_data: unknown): ModelInfoEnricher {
+export function createBifrostEnricher(_data: unknown): ModelEnricher {
   return {
-    shouldSkipModel(): boolean {
-      return false
-    },
-    getModelName(_modelId: string, rawModel?: Record<string, unknown>): string | undefined {
-      const name = rawModel?.normalized_name
-      return typeof name === 'string' && name.length > 0 ? name : undefined
-    },
-    applyModelInfo(modelConfig: any, _modelId: string, rawModel?: Record<string, unknown>): void {
-      const context = rawModel?.context_length
-      const input = rawModel?.max_input_tokens
-      const output = rawModel?.max_output_tokens
+    enrich(model) {
+      const context = model.context_length
+      const input = model.max_input_tokens
+      const output = model.max_output_tokens
+      const result: {
+        metadataName?: string
+        limit?: Record<string, number>
+        modalities?: { input?: string[]; output?: string[] }
+        cost?: { input: number; output: number }
+      } = {}
+
       if (hasUsableNumber(context) && hasUsableNumber(output)) {
-        modelConfig.limit = {
+        result.limit = {
           context,
           ...(hasUsableNumber(input) ? { input } : {}),
           output,
         }
       }
 
-      const architecture = rawModel?.architecture
+      const name = model.normalized_name
+      if (typeof name === 'string' && name.length > 0) result.metadataName = name
+
+      const architecture = model.architecture
       if (architecture && typeof architecture === 'object' && !Array.isArray(architecture)) {
         const inputModalities = getModalities((architecture as Record<string, unknown>).input_modalities)
         const outputModalities = getModalities((architecture as Record<string, unknown>).output_modalities)
         if (inputModalities || outputModalities) {
-          modelConfig.modalities = {
+          result.modalities = {
             ...(inputModalities ? { input: inputModalities } : {}),
             ...(outputModalities ? { output: outputModalities } : {}),
           }
         }
       }
 
-      const pricing = rawModel?.pricing
+      const pricing = model.pricing
       if (pricing && typeof pricing === 'object' && !Array.isArray(pricing)) {
         const inputCost = parseNonNegativeNumber((pricing as Record<string, unknown>).prompt)
         const outputCost = parseNonNegativeNumber((pricing as Record<string, unknown>).completion)
         if (inputCost !== undefined && outputCost !== undefined) {
-          modelConfig.cost = {
-            input: inputCost * 1_000_000,
-            output: outputCost * 1_000_000,
-          }
+          result.cost = { input: inputCost * 1_000_000, output: outputCost * 1_000_000 }
         }
       }
+
+      return result
     },
   }
 }
