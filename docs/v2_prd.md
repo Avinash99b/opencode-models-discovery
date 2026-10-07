@@ -289,6 +289,7 @@ Exit criteria:
 
 Port and adapt:
 
+- AIProxy inline metadata composed with models.dev.
 - models.dev enrichment.
 - Bifrost inline metadata.
 - vLLM inline metadata.
