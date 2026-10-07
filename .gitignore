@@ -7,5 +7,5 @@ dist/
 opencode-debug.log
 .cache/
 coverage/
-opencode.json
+opencode.json*
 docs/articles/
