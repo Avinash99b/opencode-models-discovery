@@ -4,7 +4,7 @@
 
 This document proposes a staged refactor for sharing host-independent model discovery behavior between the OpenCode v1 and v2 adapters.
 
-Phase 1 (shared types, filtering, and naming) and Phase 2 (the neutral enrichment contract with a legacy-enricher compatibility bridge) are implemented. Phase 3 (the host-independent discovery pipeline) is in progress.
+Phase 1 (shared types, filtering, and naming), Phase 2 (the neutral enrichment contract with a legacy-enricher compatibility bridge), Phase 3 (the host-independent discovery pipeline), and Phase 4 cleanup and parity verification are implemented.
 
 The goal is to reduce duplicated logic while preserving the separate host integrations, configuration shapes, lifecycle contracts, and compatibility guarantees of both adapters.
 
