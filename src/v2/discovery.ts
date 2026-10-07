@@ -1,27 +1,14 @@
 import { type ConfiguredProvider, type DiscoveredV2Model, type Inventory } from "./catalog.js"
-import { type ModelFieldFilter, type ProviderDiscoveryOptions } from "./provider-config.js"
-import { mapToDiscoveredV2Model, type RawOpenAIModel } from "./model-mapper.js"
-import { createModelInfoEnricher, type ModelInfoEnricher } from "../utils/model-info/index.js"
+import { type ProviderDiscoveryOptions } from "./provider-config.js"
+import { mapToDiscoveredV2Model } from "./model-mapper.js"
+import { createModelEnricher, type ModelEnricher } from "../utils/model-info/index.js"
 import { ModelInfoFormat } from "../types/plugin-config.js"
 import { fetchModelsDevData, DEFAULT_MODELS_DEV_URL } from "../utils/models-dev-fetcher.js"
-import { disambiguateModelNames } from "../utils/disambiguate-model-names.js"
+import { discoverModelDrafts } from "../core/discovery-pipeline.js"
 
 export interface CatalogProvider extends ConfiguredProvider {
   /** Ephemeral request credential resolved by the plugin refresh orchestration. */
   readonly apiKey?: string
-}
-
-function matchesFieldFilter(model: RawOpenAIModel, filter: ModelFieldFilter): boolean {
-  const value = model[filter.field]
-  if (filter.match !== undefined) return typeof value === "string" && new RegExp(filter.match).test(value)
-  return value === filter.equals
-}
-
-function included(model: RawOpenAIModel, config: ProviderDiscoveryOptions): boolean {
-  if (config.includeBy.length > 0 && !config.includeBy.some((filter) => matchesFieldFilter(model, filter))) return false
-  if (config.excludeBy.some((filter) => matchesFieldFilter(model, filter))) return false
-  if (config.includeRegex.length > 0 && !config.includeRegex.some((filter) => filter.test(model.id))) return false
-  return !config.excludeRegex.some((filter) => filter.test(model.id))
 }
 
 const DEFAULT_LITELLM_ENDPOINT = "/v1/model/info"
@@ -32,14 +19,14 @@ async function resolveModelInfoEnricher(
   apiKey: string | undefined,
   config: ProviderDiscoveryOptions,
   fetcher: typeof fetch,
-): Promise<ModelInfoEnricher | undefined> {
+): Promise<ModelEnricher | undefined> {
   const format = config.modelInfoFormat
   if (!format) return undefined
 
-  if (format === ModelInfoFormat.ModelsDev) {
+  if (format === ModelInfoFormat.ModelsDev || format === ModelInfoFormat.AIProxy) {
     const endpoint = config.modelInfoEndpoint ?? DEFAULT_MODELS_DEV_URL
     const data = await fetchModelsDevData(endpoint)
-    return createModelInfoEnricher(format, data, { filterNonChat: config.filterNonChat })
+    return createModelEnricher(format, data, { filterNonChat: config.filterNonChat })
   }
 
   if (
@@ -48,7 +35,7 @@ async function resolveModelInfoEnricher(
     format === ModelInfoFormat.LlamaSwap ||
     format === ModelInfoFormat.OmniRoute
   ) {
-    return createModelInfoEnricher(format, null)
+    return createModelEnricher(format, null)
   }
 
   if (format === ModelInfoFormat.LiteLLM || format === ModelInfoFormat.LMStudio) {
@@ -70,7 +57,7 @@ async function resolveModelInfoEnricher(
       })
       if (res.ok) {
         const data = await res.json()
-        return createModelInfoEnricher(format, data, { filterNonChat: config.filterNonChat })
+        return createModelEnricher(format, data, { filterNonChat: config.filterNonChat })
       }
     } catch {
       // Endpoint query failed; fallback without enricher
@@ -116,19 +103,18 @@ export async function discoverInventory(
       const payload = await modelsResponse.json() as { data?: unknown }
       if (!Array.isArray(payload?.data)) return
 
-      const models = new Map<string, DiscoveredV2Model>()
-       for (const entry of payload.data) {
-        if (!entry || typeof entry !== "object" || typeof (entry as { id?: unknown }).id !== "string") continue
-        const candidate = entry as RawOpenAIModel
-        if (!included(candidate, config)) continue
-        if (enricher?.shouldSkipModel(candidate.id)) continue
-
-         models.set(candidate.id, mapToDiscoveredV2Model(candidate, config, enricher))
-       }
-
-       if (config.smartModelName) {
-         disambiguateModelNames([...models.values()])
-       }
+       const drafts = discoverModelDrafts(payload.data, {
+         filter: {
+           includeBy: config.includeBy.map((filter) => ({ ...filter, match: filter.match ? new RegExp(filter.match) : undefined })),
+           excludeBy: config.excludeBy.map((filter) => ({ ...filter, match: filter.match ? new RegExp(filter.match) : undefined })),
+           includeRegex: config.includeRegex,
+           excludeRegex: config.excludeRegex,
+         },
+         smartModelName: config.smartModelName,
+         enricher,
+         enrichmentContext: { filterNonChat: config.filterNonChat },
+       })
+       const models = new Map<string, DiscoveredV2Model>(drafts.map((draft) => [draft.id, mapToDiscoveredV2Model(draft, config)]))
 
        inventory.set(provider.id, models)
     } catch {

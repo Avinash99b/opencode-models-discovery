@@ -1382,6 +1382,89 @@ describe('ModelDiscovery Plugin', () => {
       expect(config.provider.openai.models['unknown/local-model']).not.toHaveProperty('tool_call')
     })
 
+    it('should compose models.dev defaults with AIProxy inline metadata', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            data: [
+              {
+                id: 'gpt-6-luna',
+                limits: { max_input_tokens: 922000, max_output_tokens: 128000 },
+                pricing: { input_per_1m_usd: 0.1, output_per_1m_usd: 0.5 },
+                capabilities: { reasoning: true, effort_tiers: ['low', 'high', 'xhigh', 'max'] }
+              },
+              {
+                id: 'custom-model',
+                limits: { max_input_tokens: 64000, max_output_tokens: 8000 },
+                pricing: { input_per_1m_usd: 0.2, output_per_1m_usd: 0.8 }
+              }
+            ]
+          })
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            openai: {
+              models: {
+                'gpt-6-luna': {
+                  id: 'gpt-6-luna',
+                  name: 'GPT-6 Luna',
+                  reasoning: true,
+                  tool_call: true,
+                  modalities: { input: ['text', 'image'], output: ['text'] },
+                  limit: { context: 1050000, input: 922000, output: 128000 }
+                }
+              }
+            }
+          })
+        })
+
+      const config: any = {
+        provider: {
+          aiproxy: {
+            npm: '@ai-sdk/openai-compatible',
+            name: 'AIProxy',
+            options: {
+              baseURL: 'https://aiproxy.example/api',
+              apiKey: 'provider-secret',
+              modelsDiscovery: {
+                enabled: true,
+                endpoint: '/api/models',
+                modelInfoFormat: 'aiproxy',
+                smartModelName: true
+              }
+            },
+            models: {}
+          }
+        }
+      }
+
+      await pluginHooks.config(config)
+
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'https://models.dev/models.json', expect.objectContaining({
+        method: 'GET'
+      }))
+      expect(mockFetch.mock.calls[1][1]).not.toHaveProperty('headers')
+      expect(config.provider.aiproxy.models['gpt-6-luna']).toMatchObject({
+        name: 'GPT-6 Luna',
+        reasoning: true,
+        tool_call: true,
+        modalities: { input: ['text', 'image'], output: ['text'] },
+        limit: { context: 1050000, input: 922000, output: 128000 },
+        cost: { input: 0.1, output: 0.5 },
+        variants: {
+          low: { reasoningEffort: 'low' },
+          high: { reasoningEffort: 'high' },
+          xhigh: { reasoningEffort: 'xhigh' },
+          max: { reasoningEffort: 'max' }
+        }
+      })
+      expect(config.provider.aiproxy.models['custom-model']).not.toHaveProperty('limit')
+      expect(config.provider.aiproxy.models['custom-model'].cost).toEqual({ input: 0.2, output: 0.8 })
+    })
+
     it('should use models.dev display names for custom provider smart names', async () => {
       mockFetch
         .mockResolvedValueOnce({

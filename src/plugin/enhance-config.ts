@@ -2,17 +2,16 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { xdgData } from 'xdg-basedir'
 import { ToastNotifier } from '../ui/toast-notifier'
-import { categorizeModel, formatModelName, extractModelOwner } from '../utils'
-import { disambiguateModelNames } from '../utils/disambiguate-model-names'
 import { normalizeProviderOriginForCache, discoverModelsFromProvider, discoverModelInfoFromProvider, canDiscoverModels, isValidModel, DEFAULT_REQUEST_TIMEOUT_MS } from '../utils/openai-compatible-api'
-import { createModelInfoEnricher, isSupportedModelInfoFormat, type ModelInfoEnricher } from '../utils/model-info'
-import { DEFAULT_CACHE_TTL_SECONDS, getDefaultDiscoveryConfigFromEnv, getProviderModelFieldFilters, getProviderModelRegexFilter, shouldDiscoverModel, shouldDiscoverModelByFields, shouldDiscoverProviderWithOverride, ModelInfoFormat } from '../types/plugin-config'
+import { createModelEnricher, isSupportedModelInfoFormat, type ModelEnricher } from '../utils/model-info'
+import { DEFAULT_CACHE_TTL_SECONDS, getDefaultDiscoveryConfigFromEnv, getProviderModelFieldFilters, getProviderModelRegexFilter, shouldDiscoverProviderWithOverride, ModelInfoFormat } from '../types/plugin-config'
 import { DEFAULT_MODELS_DEV_URL, fetchModelsDevData } from '../utils/models-dev-fetcher'
 import { isInventoryFresh, mergeModelOverride, ProviderModelStore, type ProviderModelState } from './provider-model-store'
 import type { PluginLogger } from './logger'
 import type { PluginInput } from '@opencode-ai/plugin'
 import type { OpenAIModel } from '../types'
 import type { PluginConfig } from '../types/plugin-config'
+import { discoverModelDrafts } from '../core/discovery-pipeline'
 
 interface DiscoveredProvider {
   name: string
@@ -290,28 +289,28 @@ export async function enhanceConfig(
         models = discovery.models.filter(isValidModel)
       }
 
-      let modelInfoEnricher: ModelInfoEnricher | undefined
+      let modelInfoEnricher: ModelEnricher | undefined
       if (!usingPersistedModels && modelInfoFormat && !isSupportedModelInfoFormat(modelInfoFormat)) {
         logger.warn('Unsupported provider model info format', {
           provider: providerName,
           format: modelInfoFormat,
         })
-      } else if (!usingPersistedModels && modelInfoFormat === ModelInfoFormat.ModelsDev) {
+      } else if (!usingPersistedModels && (modelInfoFormat === ModelInfoFormat.ModelsDev || modelInfoFormat === ModelInfoFormat.AIProxy)) {
         const modelInfoEndpoint = providerDiscoveryConfig.modelInfoEndpoint ?? DEFAULT_MODELS_DEV_URL
         const modelsDevCache = await fetchModelsDevData(modelInfoEndpoint)
-        modelInfoEnricher = createModelInfoEnricher(modelInfoFormat, modelsDevCache, { filterNonChat })
+        modelInfoEnricher = createModelEnricher(modelInfoFormat, modelsDevCache, { filterNonChat })
         logger.info('Loaded models.dev data', {
           provider: providerName,
           endpoint: modelInfoEndpoint,
           count: modelsDevCache.size,
         })
       } else if (!usingPersistedModels && (modelInfoFormat === ModelInfoFormat.Bifrost || modelInfoFormat === ModelInfoFormat.LlamaSwap || modelInfoFormat === ModelInfoFormat.OmniRoute || modelInfoFormat === ModelInfoFormat.VLLM)) {
-        modelInfoEnricher = createModelInfoEnricher(modelInfoFormat, null)
+        modelInfoEnricher = createModelEnricher(modelInfoFormat, null)
       } else if (!usingPersistedModels && modelInfoFormat === ModelInfoFormat.LMStudio) {
         const modelInfoEndpoint = providerDiscoveryConfig.modelInfoEndpoint ?? DEFAULT_LMSTUDIO_MODELS_ENDPOINT
         const modelInfoDiscovery = await discoverModelInfoFromProvider(baseURL, apiKey, modelInfoEndpoint, timeoutMs)
         if (modelInfoDiscovery.ok) {
-          modelInfoEnricher = createModelInfoEnricher(modelInfoFormat, modelInfoDiscovery.data)
+          modelInfoEnricher = createModelEnricher(modelInfoFormat, modelInfoDiscovery.data)
         } else {
           logger.warn('Provider model info discovery failed', {
             provider: providerName,
@@ -324,7 +323,7 @@ export async function enhanceConfig(
         const modelInfoEndpoint = providerDiscoveryConfig.modelInfoEndpoint ?? DEFAULT_LITELLM_MODEL_INFO_ENDPOINT
         const modelInfoDiscovery = await discoverModelInfoFromProvider(baseURL, apiKey, modelInfoEndpoint, timeoutMs)
         if (modelInfoDiscovery.ok) {
-          modelInfoEnricher = createModelInfoEnricher(modelInfoFormat, modelInfoDiscovery.data, { filterNonChat })
+          modelInfoEnricher = createModelEnricher(modelInfoFormat, modelInfoDiscovery.data, { filterNonChat })
         } else {
           logger.warn('Provider model info discovery failed', {
             provider: providerName,
@@ -343,49 +342,36 @@ export async function enhanceConfig(
       const smartModelNameEnabled = providerDiscoveryConfig.smartModelName === true
 
       if (!usingPersistedModels) {
-        for (const model of models) {
-          const modelKey = model.id
-          if (!shouldDiscoverModelByFields(model, providerModelFieldFilters)) {
-            continue
-          }
-
-          if (hasProviderModelRegexFilter && !shouldDiscoverModel(model.id, providerModelRegexFilter)) {
-            continue
-          }
-
-          const modelType = categorizeModel(model.id)
-          if (modelType === 'embedding') {
-            continue
-          }
-
-          if (modelInfoEnricher?.shouldSkipModel(model.id)) {
-            continue
-          }
-
-          const owner = extractModelOwner(model.id)
+        const drafts = discoverModelDrafts(models, {
+          filter: {
+            includeBy: providerModelFieldFilters.includeBy,
+            excludeBy: providerModelFieldFilters.excludeBy,
+            includeRegex: hasProviderModelRegexFilter ? providerModelRegexFilter.includeRegex : [],
+            excludeRegex: hasProviderModelRegexFilter ? providerModelRegexFilter.excludeRegex : [],
+          },
+          smartModelName: smartModelNameEnabled,
+          enricher: modelInfoEnricher,
+          enrichmentContext: { filterNonChat },
+        })
+        for (const draft of drafts) {
           const modelConfig: any = {
-            id: model.id,
-            name: smartModelNameEnabled ? modelInfoEnricher?.getModelName?.(model.id, model) ?? formatModelName(model) : model.id,
+            id: draft.id,
+            name: draft.name,
           }
-
-          if (owner) {
-            modelConfig.organizationOwner = owner
-          }
-
-          if (modelType === 'chat') {
-            modelConfig.modalities = {
-              input: ["text"],
-              output: ["text"]
-            }
-          }
-
-          modelInfoEnricher?.applyModelInfo(modelConfig, model.id, model)
-          discoveredModels[modelKey] = modelConfig
+          if (draft.organizationOwner) modelConfig.organizationOwner = draft.organizationOwner
+          if (draft.modalities) modelConfig.modalities = draft.modalities
+          if (draft.capabilities) modelConfig.capabilities = draft.capabilities
+          if (draft.limit) modelConfig.limit = draft.limit
+          if (draft.reasoning !== undefined) modelConfig.reasoning = draft.reasoning
+          if (draft.attachment !== undefined) modelConfig.attachment = draft.attachment
+          if (draft.toolCall !== undefined) modelConfig.tool_call = draft.toolCall
+          if (draft.structuredOutput !== undefined) modelConfig.structured_output = draft.structuredOutput
+          if (draft.temperature !== undefined) modelConfig.temperature = draft.temperature
+          if (draft.cost !== undefined) modelConfig.cost = draft.cost
+          if (draft.variants !== undefined) modelConfig.variants = draft.variants
+          if (draft.compatibility) modelConfig.compatibility = draft.compatibility
+          discoveredModels[draft.id] = modelConfig
         }
-      }
-
-      if (smartModelNameEnabled) {
-        disambiguateModelNames(Object.values(discoveredModels))
       }
 
       if (cacheEnabled && !usingPersistedModels && !await currentProviderModelStore.saveModels(cacheIdentity, discoveredModels, persistedState)) {

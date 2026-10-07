@@ -1,72 +1,37 @@
-import { formatModelName } from "../utils/format-model-name.js"
 import { type DiscoveredV2Model } from "./catalog.js"
 import { type ProviderDiscoveryOptions } from "./provider-config.js"
-import { type ModelInfoEnricher } from "../utils/model-info/types.js"
-
-export interface RawOpenAIModel {
-  readonly id: string
-  readonly [key: string]: unknown
-}
-
-function resolveModelName(
-  model: RawOpenAIModel,
-  options: ProviderDiscoveryOptions,
-  enricher?: ModelInfoEnricher,
-): string {
-  if (!options.smartModelName) {
-    return model.id
-  }
-  return enricher?.getModelName?.(model.id, model) ?? formatModelName(model as any)
-}
+import type { DiscoveredModelDraft } from "../core/model-types.js"
 
 export function mapToDiscoveredV2Model(
-  model: RawOpenAIModel,
+  draft: DiscoveredModelDraft,
   options: ProviderDiscoveryOptions,
-  enricher?: ModelInfoEnricher,
 ): DiscoveredV2Model {
-  // Temporary V1-shaped config object to let existing format enrichers mutate
-  const intermediateV1: Record<string, any> = {
-    id: model.id,
-    name: resolveModelName(model, options, enricher),
-    capabilities: {
-      tools: true,
-      input: ["text"],
-      output: ["text"],
-    },
-    limit: {
-      context: 200_000,
-      output: 32_000,
-    },
-  }
-
-  // Apply enricher (models.dev, bifrost, litellm, lmstudio, vllm, llamaswap, omniroute)
-  enricher?.applyModelInfo(intermediateV1, model.id, model)
+  const resultDraft = draft
+  const rawModel = resultDraft.raw
 
   // Map to V2 Model.Info shape
-  const name = typeof intermediateV1.name === "string" && intermediateV1.name.length > 0
-    ? intermediateV1.name
-    : model.id
+  const name = options.smartModelName ? resultDraft.name : resultDraft.id
 
   // Capabilities mapping
   const capabilities: Record<string, unknown> = {
-    tools: intermediateV1.tool_call !== false && intermediateV1.capabilities?.tools !== false,
+    tools: resultDraft.toolCall !== false && resultDraft.capabilities?.tools !== false,
   }
 
   // Input modalities
-  const inputModalities = intermediateV1.modalities?.input ?? intermediateV1.capabilities?.input ?? ["text"]
+  const inputModalities = resultDraft.modalities?.input ?? resultDraft.capabilities?.input ?? ["text"]
   if (Array.isArray(inputModalities) && inputModalities.length > 0) {
     capabilities.input = inputModalities
   }
 
   // Output modalities
-  const outputModalities = intermediateV1.modalities?.output ?? intermediateV1.capabilities?.output ?? ["text"]
+  const outputModalities = resultDraft.modalities?.output ?? resultDraft.capabilities?.output ?? ["text"]
   if (Array.isArray(outputModalities) && outputModalities.length > 0) {
     capabilities.output = outputModalities
   }
 
   // Limits mapping
   const limit: Record<string, unknown> = {}
-  const rawLimit = intermediateV1.limit ?? {}
+  const rawLimit = resultDraft.limit ?? {}
   if (typeof rawLimit.context === "number" && rawLimit.context > 0) {
     limit.context = rawLimit.context
   } else {
@@ -81,42 +46,42 @@ export function mapToDiscoveredV2Model(
     limit.input = rawLimit.input
   }
 
-  const result: Record<string, any> = {
-    id: model.id,
-    modelID: model.id,
+  const mapped: Record<string, any> = {
+    id: resultDraft.id,
+    modelID: resultDraft.id,
     name,
     capabilities,
     limit,
   }
 
   // Reasoning capability: from enricher or rawModel
-  const isReasoning = typeof intermediateV1.reasoning === "boolean"
-    ? intermediateV1.reasoning
+  const isReasoning = typeof resultDraft.reasoning === "boolean"
+    ? resultDraft.reasoning
     : (
-        model.supports_reasoning === true ||
-        (model.capabilities && typeof model.capabilities === "object" && (model.capabilities as Record<string, unknown>).reasoning === true) ||
-        /(?:^|[-_/])(r1|reasoner|thinking|reasoning)(?:[-_/]|$)/i.test(model.id)
+        rawModel.supports_reasoning === true ||
+        (rawModel.capabilities && typeof rawModel.capabilities === "object" && (rawModel.capabilities as Record<string, unknown>).reasoning === true) ||
+        /(?:^|[-_/])(r1|reasoner|thinking|reasoning)(?:[-_/]|$)/i.test(resultDraft.id)
       )
 
   if (isReasoning) {
-    result.reasoning = true
-    result.compatibility = {
-      ...result.compatibility,
+    mapped.reasoning = true
+    mapped.compatibility = {
+      ...mapped.compatibility,
       reasoningField: "reasoning_content",
     }
   }
 
   // Variants mapping: convert V1 Record<string, Variant> to V2 Array<{ id, settings }>
-  if (Array.isArray(intermediateV1.variants)) {
-    result.variants = intermediateV1.variants
-  } else if (intermediateV1.variants && typeof intermediateV1.variants === "object") {
-    result.variants = Object.entries(intermediateV1.variants).map(([id, settings]) => ({
+  if (Array.isArray(resultDraft.variants)) {
+    mapped.variants = resultDraft.variants
+  } else if (resultDraft.variants && typeof resultDraft.variants === "object") {
+    mapped.variants = Object.entries(resultDraft.variants).map(([id, settings]) => ({
       id,
       settings: settings as Record<string, unknown>,
     }))
-  } else if (isReasoning && !result.variants) {
+  } else if (isReasoning && !mapped.variants) {
     // If reasoning is supported but no variants provided, define default reasoning effort variants
-    result.variants = [
+    mapped.variants = [
       { id: "low", settings: { reasoningEffort: "low" } },
       { id: "medium", settings: { reasoningEffort: "medium" } },
       { id: "high", settings: { reasoningEffort: "high" } },
@@ -124,27 +89,27 @@ export function mapToDiscoveredV2Model(
   }
 
   // Attachment capability
-  if (typeof intermediateV1.attachment === "boolean") {
-    result.attachment = intermediateV1.attachment
+  if (typeof resultDraft.attachment === "boolean") {
+    mapped.attachment = resultDraft.attachment
   }
 
   // Cost mapping (V1 cost.input/output -> V2 cost array of tiers)
-  if (intermediateV1.cost && typeof intermediateV1.cost === "object") {
-    if (Array.isArray(intermediateV1.cost)) {
-      result.cost = intermediateV1.cost
+  if (resultDraft.cost && typeof resultDraft.cost === "object") {
+    if (Array.isArray(resultDraft.cost)) {
+      mapped.cost = resultDraft.cost
     } else {
-      result.cost = [
+      mapped.cost = [
         {
-          input: intermediateV1.cost.input ?? 0,
-          output: intermediateV1.cost.output ?? 0,
+          input: (resultDraft.cost as Record<string, any>).input ?? 0,
+          output: (resultDraft.cost as Record<string, any>).output ?? 0,
           cache: {
-            read: intermediateV1.cost.cache_read ?? intermediateV1.cost.cache?.read ?? 0,
-            write: intermediateV1.cost.cache_write ?? intermediateV1.cost.cache?.write ?? 0,
+            read: (resultDraft.cost as Record<string, any>).cache_read ?? (resultDraft.cost as Record<string, any>).cache?.read ?? 0,
+            write: (resultDraft.cost as Record<string, any>).cache_write ?? (resultDraft.cost as Record<string, any>).cache?.write ?? 0,
           },
         },
       ]
     }
   }
 
-  return result as DiscoveredV2Model
+  return mapped as DiscoveredV2Model
 }
