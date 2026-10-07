@@ -1,27 +1,25 @@
 import { type ConfiguredProvider, type DiscoveredV2Model, type Inventory } from "./catalog.js"
-import { type ModelFieldFilter, type ProviderDiscoveryOptions } from "./provider-config.js"
+import { type ProviderDiscoveryOptions } from "./provider-config.js"
 import { mapToDiscoveredV2Model, type RawOpenAIModel } from "./model-mapper.js"
 import { createModelInfoEnricher, type ModelInfoEnricher } from "../utils/model-info/index.js"
 import { ModelInfoFormat } from "../types/plugin-config.js"
 import { fetchModelsDevData, DEFAULT_MODELS_DEV_URL } from "../utils/models-dev-fetcher.js"
 import { disambiguateModelNames } from "../utils/disambiguate-model-names.js"
+import { matchesModelFilter } from "../core/model-filter.js"
+import { normalizeDiscoveredRawModel } from "../core/model-types.js"
 
 export interface CatalogProvider extends ConfiguredProvider {
   /** Ephemeral request credential resolved by the plugin refresh orchestration. */
   readonly apiKey?: string
 }
 
-function matchesFieldFilter(model: RawOpenAIModel, filter: ModelFieldFilter): boolean {
-  const value = model[filter.field]
-  if (filter.match !== undefined) return typeof value === "string" && new RegExp(filter.match).test(value)
-  return value === filter.equals
-}
-
 function included(model: RawOpenAIModel, config: ProviderDiscoveryOptions): boolean {
-  if (config.includeBy.length > 0 && !config.includeBy.some((filter) => matchesFieldFilter(model, filter))) return false
-  if (config.excludeBy.some((filter) => matchesFieldFilter(model, filter))) return false
-  if (config.includeRegex.length > 0 && !config.includeRegex.some((filter) => filter.test(model.id))) return false
-  return !config.excludeRegex.some((filter) => filter.test(model.id))
+  return matchesModelFilter(model, {
+    includeBy: config.includeBy.map((filter) => ({ ...filter, match: filter.match ? new RegExp(filter.match) : undefined })),
+    excludeBy: config.excludeBy.map((filter) => ({ ...filter, match: filter.match ? new RegExp(filter.match) : undefined })),
+    includeRegex: config.includeRegex,
+    excludeRegex: config.excludeRegex,
+  })
 }
 
 const DEFAULT_LITELLM_ENDPOINT = "/v1/model/info"
@@ -118,8 +116,8 @@ export async function discoverInventory(
 
       const models = new Map<string, DiscoveredV2Model>()
        for (const entry of payload.data) {
-        if (!entry || typeof entry !== "object" || typeof (entry as { id?: unknown }).id !== "string") continue
-        const candidate = entry as RawOpenAIModel
+         const candidate = normalizeDiscoveredRawModel(entry)
+         if (!candidate) continue
         if (!included(candidate, config)) continue
         if (enricher?.shouldSkipModel(candidate.id)) continue
 

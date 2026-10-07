@@ -1,7 +1,7 @@
-import { formatModelName } from "../utils/format-model-name.js"
 import { type DiscoveredV2Model } from "./catalog.js"
 import { type ProviderDiscoveryOptions } from "./provider-config.js"
 import { type ModelInfoEnricher } from "../utils/model-info/types.js"
+import { resolveModelDisplayName } from "../core/model-naming.js"
 
 export interface RawOpenAIModel {
   readonly id: string
@@ -16,7 +16,7 @@ function resolveModelName(
   if (!options.smartModelName) {
     return model.id
   }
-  return enricher?.getModelName?.(model.id, model) ?? formatModelName(model as any)
+  return resolveModelDisplayName(model, true, enricher?.getModelName?.(model.id, model))
 }
 
 export function mapToDiscoveredV2Model(
@@ -43,9 +43,7 @@ export function mapToDiscoveredV2Model(
   enricher?.applyModelInfo(intermediateV1, model.id, model)
 
   // Map to V2 Model.Info shape
-  const name = typeof intermediateV1.name === "string" && intermediateV1.name.length > 0
-    ? intermediateV1.name
-    : model.id
+  const name = resolveModelDisplayName(model, options.smartModelName, intermediateV1.name)
 
   // Capabilities mapping
   const capabilities: Record<string, unknown> = {

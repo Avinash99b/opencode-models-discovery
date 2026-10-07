@@ -2,17 +2,19 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { xdgData } from 'xdg-basedir'
 import { ToastNotifier } from '../ui/toast-notifier'
-import { categorizeModel, formatModelName, extractModelOwner } from '../utils'
+import { categorizeModel, extractModelOwner } from '../utils'
 import { disambiguateModelNames } from '../utils/disambiguate-model-names'
 import { normalizeProviderOriginForCache, discoverModelsFromProvider, discoverModelInfoFromProvider, canDiscoverModels, isValidModel, DEFAULT_REQUEST_TIMEOUT_MS } from '../utils/openai-compatible-api'
 import { createModelInfoEnricher, isSupportedModelInfoFormat, type ModelInfoEnricher } from '../utils/model-info'
-import { DEFAULT_CACHE_TTL_SECONDS, getDefaultDiscoveryConfigFromEnv, getProviderModelFieldFilters, getProviderModelRegexFilter, shouldDiscoverModel, shouldDiscoverModelByFields, shouldDiscoverProviderWithOverride, ModelInfoFormat } from '../types/plugin-config'
+import { DEFAULT_CACHE_TTL_SECONDS, getDefaultDiscoveryConfigFromEnv, getProviderModelFieldFilters, getProviderModelRegexFilter, shouldDiscoverProviderWithOverride, ModelInfoFormat } from '../types/plugin-config'
 import { DEFAULT_MODELS_DEV_URL, fetchModelsDevData } from '../utils/models-dev-fetcher'
 import { isInventoryFresh, mergeModelOverride, ProviderModelStore, type ProviderModelState } from './provider-model-store'
 import type { PluginLogger } from './logger'
 import type { PluginInput } from '@opencode-ai/plugin'
 import type { OpenAIModel } from '../types'
 import type { PluginConfig } from '../types/plugin-config'
+import { matchesModelFilter } from '../core/model-filter'
+import { resolveModelDisplayName } from '../core/model-naming'
 
 interface DiscoveredProvider {
   name: string
@@ -345,11 +347,12 @@ export async function enhanceConfig(
       if (!usingPersistedModels) {
         for (const model of models) {
           const modelKey = model.id
-          if (!shouldDiscoverModelByFields(model, providerModelFieldFilters)) {
-            continue
-          }
-
-          if (hasProviderModelRegexFilter && !shouldDiscoverModel(model.id, providerModelRegexFilter)) {
+          if (!matchesModelFilter(model, {
+            includeBy: providerModelFieldFilters.includeBy,
+            excludeBy: providerModelFieldFilters.excludeBy,
+            includeRegex: hasProviderModelRegexFilter ? providerModelRegexFilter.includeRegex : [],
+            excludeRegex: hasProviderModelRegexFilter ? providerModelRegexFilter.excludeRegex : [],
+          })) {
             continue
           }
 
@@ -362,12 +365,15 @@ export async function enhanceConfig(
             continue
           }
 
-          const owner = extractModelOwner(model.id)
           const modelConfig: any = {
             id: model.id,
-            name: smartModelNameEnabled ? modelInfoEnricher?.getModelName?.(model.id, model) ?? formatModelName(model) : model.id,
+            name: resolveModelDisplayName(model, smartModelNameEnabled, modelInfoEnricher?.getModelName?.(model.id, model)),
           }
 
+          // Preserve the V1 output contract: organizationOwner comes from the
+          // model ID namespace. Shared naming may use raw owned_by for labels,
+          // but that must not change the persisted V1 model shape.
+          const owner = extractModelOwner(model.id)
           if (owner) {
             modelConfig.organizationOwner = owner
           }
