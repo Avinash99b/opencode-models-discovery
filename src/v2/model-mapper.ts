@@ -1,6 +1,5 @@
 import { type DiscoveredV2Model } from "./catalog.js"
 import { type ProviderDiscoveryOptions } from "./provider-config.js"
-import { type ModelInfoEnricher } from "../utils/model-info/types.js"
 import { resolveModelDisplayName } from "../core/model-naming.js"
 import { enrichModelDraft } from "../core/model-enrichment.js"
 import type { DiscoveredModelDraft } from "../core/model-types.js"
@@ -11,30 +10,40 @@ export interface RawOpenAIModel {
 }
 
 export function mapToDiscoveredV2Model(
-  model: RawOpenAIModel,
+  model: RawOpenAIModel | DiscoveredModelDraft,
   options: ProviderDiscoveryOptions,
-  enricher?: ModelInfoEnricher,
+  enricher?: import("../utils/model-info/types.js").ModelInfoEnricher,
 ): DiscoveredV2Model {
-  const draft: DiscoveredModelDraft = {
-    id: model.id,
-    name: model.id,
-    raw: model,
-    capabilities: {
-      tools: true,
-      input: ["text"],
-      output: ["text"],
-    },
-    limit: {
-      context: 200_000,
-      output: 32_000,
-    },
-  }
-
-  const enriched = enrichModelDraft(draft, enricher)
-  const resultDraft = enriched.draft
+  const isDraft = 'raw' in model
+  const enrichedResult = isDraft && model.raw && typeof model.raw === 'object'
+    ? { draft: model as DiscoveredModelDraft, metadataName: undefined }
+    : (() => {
+        const draft: DiscoveredModelDraft = {
+          id: model.id,
+          name: model.id,
+          raw: model as RawOpenAIModel,
+          capabilities: {
+            tools: true,
+            input: ["text"],
+            output: ["text"],
+          },
+          limit: {
+            context: 200_000,
+            output: 32_000,
+          },
+        }
+        const enriched = enrichModelDraft(draft, enricher)
+        return { draft: enriched.draft, metadataName: enriched.metadataName }
+      })()
+  const resultDraft = enrichedResult.draft
+  const rawModel = resultDraft.raw
 
   // Map to V2 Model.Info shape
-  const name = resolveModelDisplayName(model, options.smartModelName, enriched.metadataName)
+  const name = options.smartModelName
+    ? (enrichedResult.metadataName
+      ? resolveModelDisplayName(rawModel, true, enrichedResult.metadataName)
+      : (isDraft ? resultDraft.name : resolveModelDisplayName(rawModel, true)))
+    : resultDraft.id
 
   // Capabilities mapping
   const capabilities: Record<string, unknown> = {
@@ -70,9 +79,9 @@ export function mapToDiscoveredV2Model(
     limit.input = rawLimit.input
   }
 
-  const result: Record<string, any> = {
-    id: model.id,
-    modelID: model.id,
+  const mapped: Record<string, any> = {
+    id: resultDraft.id,
+    modelID: resultDraft.id,
     name,
     capabilities,
     limit,
@@ -82,30 +91,30 @@ export function mapToDiscoveredV2Model(
   const isReasoning = typeof resultDraft.reasoning === "boolean"
     ? resultDraft.reasoning
     : (
-        model.supports_reasoning === true ||
-        (model.capabilities && typeof model.capabilities === "object" && (model.capabilities as Record<string, unknown>).reasoning === true) ||
-        /(?:^|[-_/])(r1|reasoner|thinking|reasoning)(?:[-_/]|$)/i.test(model.id)
+        rawModel.supports_reasoning === true ||
+        (rawModel.capabilities && typeof rawModel.capabilities === "object" && (rawModel.capabilities as Record<string, unknown>).reasoning === true) ||
+        /(?:^|[-_/])(r1|reasoner|thinking|reasoning)(?:[-_/]|$)/i.test(resultDraft.id)
       )
 
   if (isReasoning) {
-    result.reasoning = true
-    result.compatibility = {
-      ...result.compatibility,
+    mapped.reasoning = true
+    mapped.compatibility = {
+      ...mapped.compatibility,
       reasoningField: "reasoning_content",
     }
   }
 
   // Variants mapping: convert V1 Record<string, Variant> to V2 Array<{ id, settings }>
   if (Array.isArray(resultDraft.variants)) {
-    result.variants = resultDraft.variants
+    mapped.variants = resultDraft.variants
   } else if (resultDraft.variants && typeof resultDraft.variants === "object") {
-    result.variants = Object.entries(resultDraft.variants).map(([id, settings]) => ({
+    mapped.variants = Object.entries(resultDraft.variants).map(([id, settings]) => ({
       id,
       settings: settings as Record<string, unknown>,
     }))
-  } else if (isReasoning && !result.variants) {
+  } else if (isReasoning && !mapped.variants) {
     // If reasoning is supported but no variants provided, define default reasoning effort variants
-    result.variants = [
+    mapped.variants = [
       { id: "low", settings: { reasoningEffort: "low" } },
       { id: "medium", settings: { reasoningEffort: "medium" } },
       { id: "high", settings: { reasoningEffort: "high" } },
@@ -114,15 +123,15 @@ export function mapToDiscoveredV2Model(
 
   // Attachment capability
   if (typeof resultDraft.attachment === "boolean") {
-    result.attachment = resultDraft.attachment
+    mapped.attachment = resultDraft.attachment
   }
 
   // Cost mapping (V1 cost.input/output -> V2 cost array of tiers)
   if (resultDraft.cost && typeof resultDraft.cost === "object") {
     if (Array.isArray(resultDraft.cost)) {
-      result.cost = resultDraft.cost
+      mapped.cost = resultDraft.cost
     } else {
-      result.cost = [
+      mapped.cost = [
         {
           input: (resultDraft.cost as Record<string, any>).input ?? 0,
           output: (resultDraft.cost as Record<string, any>).output ?? 0,
@@ -135,5 +144,5 @@ export function mapToDiscoveredV2Model(
     }
   }
 
-  return result as DiscoveredV2Model
+  return mapped as DiscoveredV2Model
 }

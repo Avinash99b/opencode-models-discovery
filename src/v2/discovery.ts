@@ -1,25 +1,14 @@
 import { type ConfiguredProvider, type DiscoveredV2Model, type Inventory } from "./catalog.js"
 import { type ProviderDiscoveryOptions } from "./provider-config.js"
-import { mapToDiscoveredV2Model, type RawOpenAIModel } from "./model-mapper.js"
+import { mapToDiscoveredV2Model } from "./model-mapper.js"
 import { createModelInfoEnricher, type ModelInfoEnricher } from "../utils/model-info/index.js"
 import { ModelInfoFormat } from "../types/plugin-config.js"
 import { fetchModelsDevData, DEFAULT_MODELS_DEV_URL } from "../utils/models-dev-fetcher.js"
-import { disambiguateModelNames } from "../utils/disambiguate-model-names.js"
-import { matchesModelFilter } from "../core/model-filter.js"
-import { normalizeDiscoveredRawModel } from "../core/model-types.js"
+import { discoverModelDrafts } from "../core/discovery-pipeline.js"
 
 export interface CatalogProvider extends ConfiguredProvider {
   /** Ephemeral request credential resolved by the plugin refresh orchestration. */
   readonly apiKey?: string
-}
-
-function included(model: RawOpenAIModel, config: ProviderDiscoveryOptions): boolean {
-  return matchesModelFilter(model, {
-    includeBy: config.includeBy.map((filter) => ({ ...filter, match: filter.match ? new RegExp(filter.match) : undefined })),
-    excludeBy: config.excludeBy.map((filter) => ({ ...filter, match: filter.match ? new RegExp(filter.match) : undefined })),
-    includeRegex: config.includeRegex,
-    excludeRegex: config.excludeRegex,
-  })
 }
 
 const DEFAULT_LITELLM_ENDPOINT = "/v1/model/info"
@@ -114,19 +103,17 @@ export async function discoverInventory(
       const payload = await modelsResponse.json() as { data?: unknown }
       if (!Array.isArray(payload?.data)) return
 
-      const models = new Map<string, DiscoveredV2Model>()
-       for (const entry of payload.data) {
-         const candidate = normalizeDiscoveredRawModel(entry)
-         if (!candidate) continue
-        if (!included(candidate, config)) continue
-        if (enricher?.shouldSkipModel(candidate.id)) continue
-
-         models.set(candidate.id, mapToDiscoveredV2Model(candidate, config, enricher))
-       }
-
-       if (config.smartModelName) {
-         disambiguateModelNames([...models.values()])
-       }
+       const drafts = discoverModelDrafts(payload.data, {
+         filter: {
+           includeBy: config.includeBy.map((filter) => ({ ...filter, match: filter.match ? new RegExp(filter.match) : undefined })),
+           excludeBy: config.excludeBy.map((filter) => ({ ...filter, match: filter.match ? new RegExp(filter.match) : undefined })),
+           includeRegex: config.includeRegex,
+           excludeRegex: config.excludeRegex,
+         },
+         smartModelName: config.smartModelName,
+         enricher,
+       })
+       const models = new Map<string, DiscoveredV2Model>(drafts.map((draft) => [draft.id, mapToDiscoveredV2Model(draft, config)]))
 
        inventory.set(provider.id, models)
     } catch {

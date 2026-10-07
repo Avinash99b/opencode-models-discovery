@@ -2,8 +2,6 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { xdgData } from 'xdg-basedir'
 import { ToastNotifier } from '../ui/toast-notifier'
-import { categorizeModel, extractModelOwner } from '../utils'
-import { disambiguateModelNames } from '../utils/disambiguate-model-names'
 import { normalizeProviderOriginForCache, discoverModelsFromProvider, discoverModelInfoFromProvider, canDiscoverModels, isValidModel, DEFAULT_REQUEST_TIMEOUT_MS } from '../utils/openai-compatible-api'
 import { createModelInfoEnricher, isSupportedModelInfoFormat, type ModelInfoEnricher } from '../utils/model-info'
 import { DEFAULT_CACHE_TTL_SECONDS, getDefaultDiscoveryConfigFromEnv, getProviderModelFieldFilters, getProviderModelRegexFilter, shouldDiscoverProviderWithOverride, ModelInfoFormat } from '../types/plugin-config'
@@ -13,10 +11,7 @@ import type { PluginLogger } from './logger'
 import type { PluginInput } from '@opencode-ai/plugin'
 import type { OpenAIModel } from '../types'
 import type { PluginConfig } from '../types/plugin-config'
-import { matchesModelFilter } from '../core/model-filter'
-import { resolveModelDisplayName } from '../core/model-naming'
-import { enrichModelDraft } from '../core/model-enrichment'
-import type { DiscoveredModelDraft } from '../core/model-types'
+import { discoverModelDrafts } from '../core/discovery-pipeline'
 
 interface DiscoveredProvider {
   name: string
@@ -347,58 +342,35 @@ export async function enhanceConfig(
       const smartModelNameEnabled = providerDiscoveryConfig.smartModelName === true
 
       if (!usingPersistedModels) {
-        for (const model of models) {
-          const modelKey = model.id
-          if (!matchesModelFilter(model, {
+        const drafts = discoverModelDrafts(models, {
+          filter: {
             includeBy: providerModelFieldFilters.includeBy,
             excludeBy: providerModelFieldFilters.excludeBy,
             includeRegex: hasProviderModelRegexFilter ? providerModelRegexFilter.includeRegex : [],
             excludeRegex: hasProviderModelRegexFilter ? providerModelRegexFilter.excludeRegex : [],
-          })) {
-            continue
-          }
-
-          const modelType = categorizeModel(model.id)
-          if (modelType === 'embedding') {
-            continue
-          }
-
-          // Preserve the V1 output contract: organizationOwner comes from the
-          // model ID namespace. Shared naming may use raw owned_by for labels,
-          // but that must not change the persisted V1 model shape.
-          const owner = extractModelOwner(model.id)
-          const draft: DiscoveredModelDraft = {
-            id: model.id,
-            name: model.id,
-            raw: model,
-            ...(owner ? { organizationOwner: owner } : {}),
-            ...(modelType === 'chat' ? { modalities: { input: ["text"], output: ["text"] } } : {}),
-          }
-          const enriched = enrichModelDraft(draft, modelInfoEnricher)
-          if (enriched.skipped) continue
-
+          },
+          smartModelName: smartModelNameEnabled,
+          enricher: modelInfoEnricher,
+        })
+        for (const draft of drafts) {
           const modelConfig: any = {
-            id: model.id,
-            name: resolveModelDisplayName(model, smartModelNameEnabled, enriched.metadataName),
+            id: draft.id,
+            name: draft.name,
           }
-          if (enriched.draft.organizationOwner) modelConfig.organizationOwner = enriched.draft.organizationOwner
-          if (enriched.draft.modalities) modelConfig.modalities = enriched.draft.modalities
-          if (enriched.draft.capabilities) modelConfig.capabilities = enriched.draft.capabilities
-          if (enriched.draft.limit) modelConfig.limit = enriched.draft.limit
-          if (enriched.draft.reasoning !== undefined) modelConfig.reasoning = enriched.draft.reasoning
-          if (enriched.draft.attachment !== undefined) modelConfig.attachment = enriched.draft.attachment
-          if (enriched.draft.toolCall !== undefined) modelConfig.tool_call = enriched.draft.toolCall
-          if (enriched.draft.structuredOutput !== undefined) modelConfig.structured_output = enriched.draft.structuredOutput
-          if (enriched.draft.temperature !== undefined) modelConfig.temperature = enriched.draft.temperature
-          if (enriched.draft.cost !== undefined) modelConfig.cost = enriched.draft.cost
-          if (enriched.draft.variants !== undefined) modelConfig.variants = enriched.draft.variants
-          if (enriched.draft.compatibility) modelConfig.compatibility = enriched.draft.compatibility
-          discoveredModels[modelKey] = modelConfig
+          if (draft.organizationOwner) modelConfig.organizationOwner = draft.organizationOwner
+          if (draft.modalities) modelConfig.modalities = draft.modalities
+          if (draft.capabilities) modelConfig.capabilities = draft.capabilities
+          if (draft.limit) modelConfig.limit = draft.limit
+          if (draft.reasoning !== undefined) modelConfig.reasoning = draft.reasoning
+          if (draft.attachment !== undefined) modelConfig.attachment = draft.attachment
+          if (draft.toolCall !== undefined) modelConfig.tool_call = draft.toolCall
+          if (draft.structuredOutput !== undefined) modelConfig.structured_output = draft.structuredOutput
+          if (draft.temperature !== undefined) modelConfig.temperature = draft.temperature
+          if (draft.cost !== undefined) modelConfig.cost = draft.cost
+          if (draft.variants !== undefined) modelConfig.variants = draft.variants
+          if (draft.compatibility) modelConfig.compatibility = draft.compatibility
+          discoveredModels[draft.id] = modelConfig
         }
-      }
-
-      if (smartModelNameEnabled) {
-        disambiguateModelNames(Object.values(discoveredModels))
       }
 
       if (cacheEnabled && !usingPersistedModels && !await currentProviderModelStore.saveModels(cacheIdentity, discoveredModels, persistedState)) {
