@@ -8,6 +8,7 @@ import { createVLLMEnricher } from '../../src/utils/model-info/vllm'
 import { createLlamaSwapEnricher } from '../../src/utils/model-info/llamaswap'
 import { createOmniRouteEnricher } from '../../src/utils/model-info/omniroute'
 import { createLMStudioEnricher } from '../../src/utils/model-info/lmstudio'
+import { createAIProxyEnricher } from '../../src/utils/model-info/aiproxy'
 
 const options: ProviderDiscoveryOptions = {
   enabled: true,
@@ -211,5 +212,39 @@ describe('V1/V2 shared-core parity', () => {
     expect(mapped.limit).toEqual({ context: 8192, output: 32000 })
     expect(mapped.capabilities.input).toEqual(['text', 'image'])
     expect(mapped.capabilities.tools).toBe(true)
+  })
+
+  it('keeps native AIProxy enrichment equivalent for V1 drafts and V2 models', () => {
+    const enricher = createAIProxyEnricher(new Map([['openai/gpt-6', {
+      id: 'openai/gpt-6',
+      name: 'GPT 6',
+      reasoning: true,
+      tool_call: true,
+      modalities: { input: ['text', 'image'], output: ['text'] },
+      limit: { context: 1_000_000, output: 32_000 },
+    }]]))
+    const drafts = discoverModelDrafts([{
+      id: 'openai/gpt-6',
+      limits: { max_input_tokens: 900_000, max_output_tokens: 64_000 },
+      pricing: { input_per_1m_usd: 0.2, output_per_1m_usd: 0.8 },
+      capabilities: { reasoning: true, effort_tiers: ['low', 'high'] },
+    }], {
+      filter: { includeBy: [], excludeBy: [], includeRegex: [], excludeRegex: [] },
+      smartModelName: true,
+      enricher,
+      enrichmentContext: { filterNonChat: true },
+    })
+    const draft = drafts[0]!
+    const mapped = mapToDiscoveredV2Model(draft, options)
+
+    expect(draft.name).toBe('GPT 6')
+    expect(draft.limit).toEqual({ context: 1_000_000, output: 64_000, input: 900_000 })
+    expect(draft.cost).toEqual({ input: 0.2, output: 0.8 })
+    expect(draft.reasoning).toBe(true)
+    expect(draft.variants).toEqual({ low: { reasoningEffort: 'low' }, high: { reasoningEffort: 'high' } })
+    expect(mapped.name).toBe('GPT 6')
+    expect(mapped.limit).toEqual(draft.limit)
+    expect(mapped.capabilities.tools).toBe(true)
+    expect(mapped.cost).toEqual([{ input: 0.2, output: 0.8, cache: { read: 0, write: 0 } }])
   })
 })

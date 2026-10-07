@@ -68,7 +68,7 @@ Install the package from npm, then add a provider to your OpenCode v2 `opencode.
 
 Set `GATEWAY_API_KEY` in the environment used to start OpenCode; the `${GATEWAY_API_KEY}` placeholder is resolved by the OpenCode v2 host. If your endpoint needs no credential, omit `apiKey`. Use the same provider package shown above for OpenAI-compatible discovery. The provider needs a `baseURL`; the plugin fetches its models from `/v1/models` by default (relative to the URL's **origin**). For providers that expose `/models` instead, set `"endpoint": "/models"` inside `modelsDiscovery`.
 
-`modelInfoFormat` and `smartModelName` are optional: without them, discovered names remain the model IDs and no external metadata is fetched. Supported metadata formats are `models.dev`, `bifrost`, `litellm`, `vllm`, `lmstudio`, `llama-swap`, and `omniroute`. `models.dev` fetches `https://models.dev/models.json` by default; `modelInfoEndpoint` can override the URL. `filterNonChat` defaults to `true`; it can filter non-chat models when the selected metadata source supplies that information. `timeoutMs` defaults to 5000 ms. Models returned by discovery are added alongside explicitly configured models.
+`modelInfoFormat` and `smartModelName` are optional: without them, discovered names remain the model IDs and no external metadata is fetched. Supported metadata formats are `aiproxy`, `models.dev`, `bifrost`, `litellm`, `vllm`, `lmstudio`, `llama-swap`, and `omniroute`. `models.dev` fetches `https://models.dev/models.json` by default; `modelInfoEndpoint` can override the catalog URL. The `aiproxy` format composes that catalog with inline metadata from AIProxy's model list. `filterNonChat` defaults to `true`; it can filter non-chat models when the selected metadata source supplies that information. `timeoutMs` defaults to 5000 ms. Models returned by discovery are added alongside explicitly configured models.
 
 For a local build, run `npm run compile` and replace the package value above with `"file:///absolute/path/to/opencode-models-discovery/dist"`. OpenCode v2 expects a **directory**, not a path to `index.js` or `server.js`. After rebuilding plugin code, run `opencode service restart` so the background service loads the new bundle. Discovery runs when the plugin initializes; the OpenCode v2 agent tools `models_discovery_refresh` and `models_discovery_status` can refresh or inspect the in-memory inventory during a session. The V2 adapter also provides the interim `/models-discovery-refresh` Server Command; its result is currently reported through the active session, while a future release may migrate this feedback to a TUI-only toast.
 
@@ -213,7 +213,7 @@ This command is injected only when legacy global discovery config is detected.
 
 The migration assistant is instructed to inspect project config, user global config, and `OPENCODE_CONFIG` when present. It should not edit managed or organization-controlled config unless you explicitly ask it to.
 
-## Model metadata enrichment (OpenCode v1 examples)
+## Model metadata enrichment examples
 
 Discovery adds model ids to your OpenCode provider config. Some providers only expose minimal `/models` responses, so the plugin can optionally enrich discovered models with OpenCode-compatible capability metadata such as context limits, output limits, reasoning, tool calling, attachments, structured output, temperature support, and modalities.
 
@@ -232,6 +232,44 @@ For models.dev enrichment:
 ```
 
 `modelInfoEndpoint` is optional for `models.dev`; it must be a complete URL and defaults to `https://models.dev/models.json`. Use it to configure an accessible mirror or proxy. For LiteLLM and LM Studio, it accepts either an origin-relative path or a complete URL.
+
+For AIProxy's inline model-list metadata, use `modelInfoFormat: "aiproxy"`:
+
+```json
+{
+  "providers": {
+    "aiproxy": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://aiproxy.example/api",
+        "apiKey": "{env:AIPROXY_API_KEY}",
+        "modelsDiscovery": {
+          "enabled": true,
+          "endpoint": "/api/models",
+          "modelInfoFormat": "aiproxy"
+        }
+      }
+    }
+  }
+}
+```
+
+This format does not make an additional request to AIProxy. It enriches each discovered entry from its inline `limits` and `pricing` fields, and composes those values over models.dev metadata. `modelInfoEndpoint`, if set, overrides the models.dev URL for this format; it does not change the AIProxy model-list endpoint.
+
+AIProxy `limits.max_input_tokens` and `limits.max_output_tokens` map to OpenCode's input and output limits only when a valid context limit is already available. The plugin does not infer total context by adding input and output limits. Pricing fields `input_per_1m_usd`, `output_per_1m_usd`, and `cache_read_per_1m_usd` are already USD per million tokens and map directly; explicit zero prices are preserved. The duration-specific `cache_write_5m_per_1m_usd` field is currently ignored until its semantics can be represented without ambiguity.
+
+For reasoning variants, AIProxy can include an explicit per-model capability list:
+
+```json
+{
+  "capabilities": {
+    "reasoning": true,
+    "effort_tiers": ["low", "medium", "high", "xhigh", "max"]
+  }
+}
+```
+
+The plugin maps the supported OpenAI efforts `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max` to OpenCode variants. It does not infer `xhigh` or `max` from model names. If `effort_tiers` is absent, the AIProxy enricher adds no variants (OpenCode V2's existing low/medium/high fallback can still apply when the model is otherwise marked as reasoning); if it is present, only listed, recognized tiers are exposed. **AIProxy's currently tested `/api/models` response does not include `capabilities.effort_tiers`, so automatic `xhigh`/`max` discovery requires AIProxy to add that field.**
 
 For LiteLLM-compatible model info endpoints, `/v1/model/info` is used by default:
 

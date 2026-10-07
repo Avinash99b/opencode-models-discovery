@@ -5,6 +5,7 @@ import { createLlamaSwapEnricher } from './llamaswap'
 import { createModelsDevEnricher } from './models-dev'
 import { createOmniRouteEnricher } from './omniroute'
 import { createVLLMEnricher } from './vllm'
+import { createAIProxyEnricher } from './aiproxy'
 import { ModelInfoFormat } from '../../types/plugin-config'
 import type { ModelInfoEnricher, ModelInfoEnricherOptions } from './types'
 import { adaptLegacyModelInfoEnricher, type ModelEnricher } from '../../core/model-enrichment'
@@ -49,13 +50,16 @@ export function createModelEnricher(
   if (format === ModelInfoFormat.LiteLLM) {
     return createLiteLLMEnricher(data)
   }
+  if (format === ModelInfoFormat.AIProxy) {
+    return createAIProxyEnricher(data)
+  }
 
   const legacy = createModelInfoEnricher(format, data, options)
   return legacy ? adaptLegacyModelInfoEnricher(legacy) : undefined
 }
 
 export function isSupportedModelInfoFormat(format: ModelInfoFormat): boolean {
-  return format === ModelInfoFormat.ModelsDev || format === ModelInfoFormat.Bifrost || format === ModelInfoFormat.VLLM || format === ModelInfoFormat.LlamaSwap || format === ModelInfoFormat.OmniRoute || format === ModelInfoFormat.LMStudio || format === ModelInfoFormat.LiteLLM || MODEL_INFO_ENRICHERS[format] !== undefined
+  return format === ModelInfoFormat.ModelsDev || format === ModelInfoFormat.Bifrost || format === ModelInfoFormat.VLLM || format === ModelInfoFormat.LlamaSwap || format === ModelInfoFormat.OmniRoute || format === ModelInfoFormat.LMStudio || format === ModelInfoFormat.LiteLLM || format === ModelInfoFormat.AIProxy || MODEL_INFO_ENRICHERS[format] !== undefined
 }
 
 export type { ModelInfoEnricher, ModelInfoEnricherOptions }

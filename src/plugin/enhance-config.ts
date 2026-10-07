@@ -295,7 +295,7 @@ export async function enhanceConfig(
           provider: providerName,
           format: modelInfoFormat,
         })
-      } else if (!usingPersistedModels && modelInfoFormat === ModelInfoFormat.ModelsDev) {
+      } else if (!usingPersistedModels && (modelInfoFormat === ModelInfoFormat.ModelsDev || modelInfoFormat === ModelInfoFormat.AIProxy)) {
         const modelInfoEndpoint = providerDiscoveryConfig.modelInfoEndpoint ?? DEFAULT_MODELS_DEV_URL
         const modelsDevCache = await fetchModelsDevData(modelInfoEndpoint)
         modelInfoEnricher = createModelEnricher(modelInfoFormat, modelsDevCache, { filterNonChat })
