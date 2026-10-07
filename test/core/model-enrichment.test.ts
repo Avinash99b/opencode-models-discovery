@@ -1,25 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import { enrichModelDraft } from '../../src/core/model-enrichment'
-import { adaptLegacyModelInfoEnricher } from '../../src/core/model-enrichment'
 
 describe('shared model enrichment contract', () => {
-  it('adapts legacy enricher output into a neutral draft', () => {
+  it('applies native enricher output into a neutral draft', () => {
     const result = enrichModelDraft({
       id: 'provider/model',
       name: 'provider/model',
       raw: { id: 'provider/model' },
       capabilities: { tools: true },
       limit: { context: 100 },
-    }, adaptLegacyModelInfoEnricher({
-      shouldSkipModel: () => false,
-      getModelName: () => 'Readable Model',
-      applyModelInfo: (config) => {
-        config.reasoning = true
-        config.tool_call = false
-        config.cost = { input: 1, output: 2 }
-        config.modalities = { input: ['text', 'image'] }
-      },
-    }))
+    }, {
+      enrich: () => ({
+        metadataName: 'Readable Model',
+        reasoning: true,
+        toolCall: false,
+        cost: { input: 1, output: 2 },
+        modalities: { input: ['text', 'image'] },
+      }),
+    })
 
     expect(result.skipped).toBe(false)
     expect(result.metadataName).toBe('Readable Model')
@@ -29,14 +27,16 @@ describe('shared model enrichment contract', () => {
     expect(result.draft.modalities).toEqual({ input: ['text', 'image'] })
   })
 
-  it('preserves skip decisions without applying enrichment', () => {
+  it('preserves native skip decisions without applying enrichment', () => {
     let applied = false
-    const result = enrichModelDraft({ id: 'skip-me', name: 'skip-me', raw: { id: 'skip-me' } }, adaptLegacyModelInfoEnricher({
-      shouldSkipModel: () => true,
-      applyModelInfo: () => { applied = true },
-    }))
+    const result = enrichModelDraft({ id: 'skip-me', name: 'skip-me', raw: { id: 'skip-me' } }, {
+      enrich: () => {
+        applied = true
+        return { skip: true }
+      },
+    })
 
     expect(result.skipped).toBe(true)
-    expect(applied).toBe(false)
+    expect(applied).toBe(true)
   })
 })

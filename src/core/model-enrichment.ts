@@ -28,44 +28,13 @@ export interface ModelEnricher {
   enrich(model: DiscoveredRawModel, context: ModelEnrichmentContext): ModelEnrichmentResult
 }
 
-export interface LegacyModelInfoEnricher {
-  shouldSkipModel(modelId: string): boolean
-  getModelName?(modelId: string, rawModel?: Record<string, unknown>): string | undefined
-  applyModelInfo(modelConfig: any, modelId: string, rawModel?: Record<string, unknown>): void
-}
-
 export interface EnrichedModelDraft {
   readonly draft: DiscoveredModelDraft
   readonly metadataName?: string
   readonly skipped: boolean
 }
 
-export function adaptLegacyModelInfoEnricher(legacy: LegacyModelInfoEnricher): ModelEnricher {
-  return {
-    enrich(model) {
-      if (legacy.shouldSkipModel(model.id)) return { skip: true }
-
-      const config: Record<string, any> = { id: model.id, name: model.id }
-      legacy.applyModelInfo(config, model.id, model)
-      return {
-        metadataName: legacy.getModelName?.(model.id, model),
-        capabilities: config.capabilities,
-        limit: config.limit,
-        modalities: config.modalities,
-        reasoning: config.reasoning,
-        attachment: config.attachment,
-        toolCall: config.tool_call,
-        structuredOutput: config.structured_output,
-        temperature: config.temperature,
-        cost: config.cost,
-        variants: config.variants,
-        compatibility: config.compatibility,
-      }
-    },
-  }
-}
-
-/** Bridges the legacy provider enrichers into the host-independent draft shape. */
+/** Applies a provider-neutral enricher to a discovered model draft. */
 export function enrichModelDraft(
   draft: DiscoveredModelDraft,
   enricher?: ModelEnricher,
