@@ -15,6 +15,8 @@ import type { OpenAIModel } from '../types'
 import type { PluginConfig } from '../types/plugin-config'
 import { matchesModelFilter } from '../core/model-filter'
 import { resolveModelDisplayName } from '../core/model-naming'
+import { enrichModelDraft } from '../core/model-enrichment'
+import type { DiscoveredModelDraft } from '../core/model-types'
 
 interface DiscoveredProvider {
   name: string
@@ -361,31 +363,36 @@ export async function enhanceConfig(
             continue
           }
 
-          if (modelInfoEnricher?.shouldSkipModel(model.id)) {
-            continue
-          }
-
-          const modelConfig: any = {
-            id: model.id,
-            name: resolveModelDisplayName(model, smartModelNameEnabled, modelInfoEnricher?.getModelName?.(model.id, model)),
-          }
-
           // Preserve the V1 output contract: organizationOwner comes from the
           // model ID namespace. Shared naming may use raw owned_by for labels,
           // but that must not change the persisted V1 model shape.
           const owner = extractModelOwner(model.id)
-          if (owner) {
-            modelConfig.organizationOwner = owner
+          const draft: DiscoveredModelDraft = {
+            id: model.id,
+            name: model.id,
+            raw: model,
+            ...(owner ? { organizationOwner: owner } : {}),
+            ...(modelType === 'chat' ? { modalities: { input: ["text"], output: ["text"] } } : {}),
           }
+          const enriched = enrichModelDraft(draft, modelInfoEnricher)
+          if (enriched.skipped) continue
 
-          if (modelType === 'chat') {
-            modelConfig.modalities = {
-              input: ["text"],
-              output: ["text"]
-            }
+          const modelConfig: any = {
+            id: model.id,
+            name: resolveModelDisplayName(model, smartModelNameEnabled, enriched.metadataName),
           }
-
-          modelInfoEnricher?.applyModelInfo(modelConfig, model.id, model)
+          if (enriched.draft.organizationOwner) modelConfig.organizationOwner = enriched.draft.organizationOwner
+          if (enriched.draft.modalities) modelConfig.modalities = enriched.draft.modalities
+          if (enriched.draft.capabilities) modelConfig.capabilities = enriched.draft.capabilities
+          if (enriched.draft.limit) modelConfig.limit = enriched.draft.limit
+          if (enriched.draft.reasoning !== undefined) modelConfig.reasoning = enriched.draft.reasoning
+          if (enriched.draft.attachment !== undefined) modelConfig.attachment = enriched.draft.attachment
+          if (enriched.draft.toolCall !== undefined) modelConfig.tool_call = enriched.draft.toolCall
+          if (enriched.draft.structuredOutput !== undefined) modelConfig.structured_output = enriched.draft.structuredOutput
+          if (enriched.draft.temperature !== undefined) modelConfig.temperature = enriched.draft.temperature
+          if (enriched.draft.cost !== undefined) modelConfig.cost = enriched.draft.cost
+          if (enriched.draft.variants !== undefined) modelConfig.variants = enriched.draft.variants
+          if (enriched.draft.compatibility) modelConfig.compatibility = enriched.draft.compatibility
           discoveredModels[modelKey] = modelConfig
         }
       }

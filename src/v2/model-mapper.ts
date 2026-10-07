@@ -2,21 +2,12 @@ import { type DiscoveredV2Model } from "./catalog.js"
 import { type ProviderDiscoveryOptions } from "./provider-config.js"
 import { type ModelInfoEnricher } from "../utils/model-info/types.js"
 import { resolveModelDisplayName } from "../core/model-naming.js"
+import { enrichModelDraft } from "../core/model-enrichment.js"
+import type { DiscoveredModelDraft } from "../core/model-types.js"
 
 export interface RawOpenAIModel {
   readonly id: string
   readonly [key: string]: unknown
-}
-
-function resolveModelName(
-  model: RawOpenAIModel,
-  options: ProviderDiscoveryOptions,
-  enricher?: ModelInfoEnricher,
-): string {
-  if (!options.smartModelName) {
-    return model.id
-  }
-  return resolveModelDisplayName(model, true, enricher?.getModelName?.(model.id, model))
 }
 
 export function mapToDiscoveredV2Model(
@@ -24,10 +15,10 @@ export function mapToDiscoveredV2Model(
   options: ProviderDiscoveryOptions,
   enricher?: ModelInfoEnricher,
 ): DiscoveredV2Model {
-  // Temporary V1-shaped config object to let existing format enrichers mutate
-  const intermediateV1: Record<string, any> = {
+  const draft: DiscoveredModelDraft = {
     id: model.id,
-    name: resolveModelName(model, options, enricher),
+    name: model.id,
+    raw: model,
     capabilities: {
       tools: true,
       input: ["text"],
@@ -39,32 +30,32 @@ export function mapToDiscoveredV2Model(
     },
   }
 
-  // Apply enricher (models.dev, bifrost, litellm, lmstudio, vllm, llamaswap, omniroute)
-  enricher?.applyModelInfo(intermediateV1, model.id, model)
+  const enriched = enrichModelDraft(draft, enricher)
+  const resultDraft = enriched.draft
 
   // Map to V2 Model.Info shape
-  const name = resolveModelDisplayName(model, options.smartModelName, intermediateV1.name)
+  const name = resolveModelDisplayName(model, options.smartModelName, enriched.metadataName)
 
   // Capabilities mapping
   const capabilities: Record<string, unknown> = {
-    tools: intermediateV1.tool_call !== false && intermediateV1.capabilities?.tools !== false,
+    tools: resultDraft.toolCall !== false && resultDraft.capabilities?.tools !== false,
   }
 
   // Input modalities
-  const inputModalities = intermediateV1.modalities?.input ?? intermediateV1.capabilities?.input ?? ["text"]
+  const inputModalities = resultDraft.modalities?.input ?? resultDraft.capabilities?.input ?? ["text"]
   if (Array.isArray(inputModalities) && inputModalities.length > 0) {
     capabilities.input = inputModalities
   }
 
   // Output modalities
-  const outputModalities = intermediateV1.modalities?.output ?? intermediateV1.capabilities?.output ?? ["text"]
+  const outputModalities = resultDraft.modalities?.output ?? resultDraft.capabilities?.output ?? ["text"]
   if (Array.isArray(outputModalities) && outputModalities.length > 0) {
     capabilities.output = outputModalities
   }
 
   // Limits mapping
   const limit: Record<string, unknown> = {}
-  const rawLimit = intermediateV1.limit ?? {}
+  const rawLimit = resultDraft.limit ?? {}
   if (typeof rawLimit.context === "number" && rawLimit.context > 0) {
     limit.context = rawLimit.context
   } else {
@@ -88,8 +79,8 @@ export function mapToDiscoveredV2Model(
   }
 
   // Reasoning capability: from enricher or rawModel
-  const isReasoning = typeof intermediateV1.reasoning === "boolean"
-    ? intermediateV1.reasoning
+  const isReasoning = typeof resultDraft.reasoning === "boolean"
+    ? resultDraft.reasoning
     : (
         model.supports_reasoning === true ||
         (model.capabilities && typeof model.capabilities === "object" && (model.capabilities as Record<string, unknown>).reasoning === true) ||
@@ -105,10 +96,10 @@ export function mapToDiscoveredV2Model(
   }
 
   // Variants mapping: convert V1 Record<string, Variant> to V2 Array<{ id, settings }>
-  if (Array.isArray(intermediateV1.variants)) {
-    result.variants = intermediateV1.variants
-  } else if (intermediateV1.variants && typeof intermediateV1.variants === "object") {
-    result.variants = Object.entries(intermediateV1.variants).map(([id, settings]) => ({
+  if (Array.isArray(resultDraft.variants)) {
+    result.variants = resultDraft.variants
+  } else if (resultDraft.variants && typeof resultDraft.variants === "object") {
+    result.variants = Object.entries(resultDraft.variants).map(([id, settings]) => ({
       id,
       settings: settings as Record<string, unknown>,
     }))
@@ -122,22 +113,22 @@ export function mapToDiscoveredV2Model(
   }
 
   // Attachment capability
-  if (typeof intermediateV1.attachment === "boolean") {
-    result.attachment = intermediateV1.attachment
+  if (typeof resultDraft.attachment === "boolean") {
+    result.attachment = resultDraft.attachment
   }
 
   // Cost mapping (V1 cost.input/output -> V2 cost array of tiers)
-  if (intermediateV1.cost && typeof intermediateV1.cost === "object") {
-    if (Array.isArray(intermediateV1.cost)) {
-      result.cost = intermediateV1.cost
+  if (resultDraft.cost && typeof resultDraft.cost === "object") {
+    if (Array.isArray(resultDraft.cost)) {
+      result.cost = resultDraft.cost
     } else {
       result.cost = [
         {
-          input: intermediateV1.cost.input ?? 0,
-          output: intermediateV1.cost.output ?? 0,
+          input: (resultDraft.cost as Record<string, any>).input ?? 0,
+          output: (resultDraft.cost as Record<string, any>).output ?? 0,
           cache: {
-            read: intermediateV1.cost.cache_read ?? intermediateV1.cost.cache?.read ?? 0,
-            write: intermediateV1.cost.cache_write ?? intermediateV1.cost.cache?.write ?? 0,
+            read: (resultDraft.cost as Record<string, any>).cache_read ?? (resultDraft.cost as Record<string, any>).cache?.read ?? 0,
+            write: (resultDraft.cost as Record<string, any>).cache_write ?? (resultDraft.cost as Record<string, any>).cache?.write ?? 0,
           },
         },
       ]

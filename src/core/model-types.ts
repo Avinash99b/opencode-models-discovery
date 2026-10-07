@@ -19,6 +19,9 @@ export interface DiscoveredModelDraft {
   }
   reasoning?: boolean
   attachment?: boolean
+  toolCall?: boolean
+  structuredOutput?: boolean
+  temperature?: boolean
   cost?: unknown
   variants?: unknown
   compatibility?: Record<string, unknown>
