@@ -11,8 +11,20 @@ import type { ModelInfoEnricher, ModelInfoEnricherOptions } from './types'
 import { adaptLegacyModelInfoEnricher, type ModelEnricher } from '../../core/model-enrichment'
 
 type ModelInfoEnricherFactory = (data: unknown, options?: ModelInfoEnricherOptions) => ModelInfoEnricher
+type ModelEnricherFactory = (data: unknown, options?: ModelInfoEnricherOptions) => ModelEnricher
 
 const MODEL_INFO_ENRICHERS: Partial<Record<ModelInfoFormat, ModelInfoEnricherFactory>> = {
+}
+
+const MODEL_ENRICHERS: Partial<Record<ModelInfoFormat, ModelEnricherFactory>> = {
+  [ModelInfoFormat.ModelsDev]: (data) => createModelsDevEnricher(data),
+  [ModelInfoFormat.Bifrost]: (data) => createBifrostEnricher(data),
+  [ModelInfoFormat.VLLM]: (data) => createVLLMEnricher(data),
+  [ModelInfoFormat.LlamaSwap]: (data) => createLlamaSwapEnricher(data),
+  [ModelInfoFormat.OmniRoute]: (data) => createOmniRouteEnricher(data),
+  [ModelInfoFormat.LMStudio]: (data) => createLMStudioEnricher(data),
+  [ModelInfoFormat.LiteLLM]: (data) => createLiteLLMEnricher(data),
+  [ModelInfoFormat.AIProxy]: (data) => createAIProxyEnricher(data),
 }
 
 export function createModelInfoEnricher(
@@ -29,37 +41,15 @@ export function createModelEnricher(
   data: unknown,
   options?: ModelInfoEnricherOptions,
 ): ModelEnricher | undefined {
-  if (format === ModelInfoFormat.ModelsDev) {
-    return createModelsDevEnricher(data)
-  }
-  if (format === ModelInfoFormat.Bifrost) {
-    return createBifrostEnricher(data)
-  }
-  if (format === ModelInfoFormat.VLLM) {
-    return createVLLMEnricher(data)
-  }
-  if (format === ModelInfoFormat.LlamaSwap) {
-    return createLlamaSwapEnricher(data)
-  }
-  if (format === ModelInfoFormat.OmniRoute) {
-    return createOmniRouteEnricher(data)
-  }
-  if (format === ModelInfoFormat.LMStudio) {
-    return createLMStudioEnricher(data)
-  }
-  if (format === ModelInfoFormat.LiteLLM) {
-    return createLiteLLMEnricher(data)
-  }
-  if (format === ModelInfoFormat.AIProxy) {
-    return createAIProxyEnricher(data)
-  }
+  const native = MODEL_ENRICHERS[format]
+  if (native) return native(data, options)
 
   const legacy = createModelInfoEnricher(format, data, options)
   return legacy ? adaptLegacyModelInfoEnricher(legacy) : undefined
 }
 
 export function isSupportedModelInfoFormat(format: ModelInfoFormat): boolean {
-  return format === ModelInfoFormat.ModelsDev || format === ModelInfoFormat.Bifrost || format === ModelInfoFormat.VLLM || format === ModelInfoFormat.LlamaSwap || format === ModelInfoFormat.OmniRoute || format === ModelInfoFormat.LMStudio || format === ModelInfoFormat.LiteLLM || format === ModelInfoFormat.AIProxy || MODEL_INFO_ENRICHERS[format] !== undefined
+  return MODEL_ENRICHERS[format] !== undefined || MODEL_INFO_ENRICHERS[format] !== undefined
 }
 
 export type { ModelInfoEnricher, ModelInfoEnricherOptions }
