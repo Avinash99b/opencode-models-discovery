@@ -205,11 +205,11 @@ describe('V1/V2 shared-core parity', () => {
     const mapped = mapToDiscoveredV2Model(draft, options)
 
     expect(draft.name).toBe('Gemma Local')
-    expect(draft.limit).toEqual({ context: 8192, output: 0 })
+    expect(draft.limit).toEqual({ context: 8192, output: 8192 })
     expect(draft.modalities).toEqual({ input: ['text', 'image'], output: ['text'] })
     expect(draft.toolCall).toBe(true)
     expect(mapped.name).toBe('Gemma Local')
-    expect(mapped.limit).toEqual({ context: 8192, output: 32000 })
+    expect(mapped.limit).toEqual({ context: 8192, output: 8192 })
     expect(mapped.capabilities.input).toEqual(['text', 'image'])
     expect(mapped.capabilities.tools).toBe(true)
   })

@@ -1,6 +1,6 @@
 import { type DiscoveredV2Model } from "./catalog.js"
 import { type ProviderDiscoveryOptions } from "./provider-config.js"
-import type { DiscoveredModelDraft } from "../core/model-types.js"
+import { createModelLimits, DEFAULT_CONTEXT_TOKEN_LIMIT, type DiscoveredModelDraft } from "../core/model-types.js"
 
 export function mapToDiscoveredV2Model(
   draft: DiscoveredModelDraft,
@@ -30,20 +30,16 @@ export function mapToDiscoveredV2Model(
   }
 
   // Limits mapping
-  const limit: Record<string, unknown> = {}
   const rawLimit = resultDraft.limit ?? {}
-  if (typeof rawLimit.context === "number" && rawLimit.context > 0) {
-    limit.context = rawLimit.context
-  } else {
-    limit.context = 200_000
-  }
-  if (typeof rawLimit.output === "number" && rawLimit.output > 0) {
-    limit.output = rawLimit.output
-  } else {
-    limit.output = 32_000
-  }
-  if (typeof rawLimit.input === "number" && rawLimit.input > 0) {
-    limit.input = rawLimit.input
+  const rawContext = typeof rawLimit.context === "number" && rawLimit.context > 0 ? rawLimit.context : undefined
+  const rawOutput = typeof rawLimit.output === "number" && rawLimit.output > 0 ? rawLimit.output : undefined
+  const rawInput = typeof rawLimit.input === "number" && rawLimit.input > 0 ? rawLimit.input : undefined
+
+  const resolvedLimits = createModelLimits(rawContext ?? DEFAULT_CONTEXT_TOKEN_LIMIT, rawOutput, rawInput)!
+  const limit: Record<string, unknown> = {
+    context: resolvedLimits.context,
+    output: resolvedLimits.output,
+    ...(resolvedLimits.input !== undefined ? { input: resolvedLimits.input } : {}),
   }
 
   const mapped: Record<string, any> = {

@@ -288,6 +288,73 @@ The refactor must preserve:
 - Add cross-adapter parity tests for equivalent raw provider responses.
 - Record the refactor in release notes.
 
+## Known Gaps After Phase 4
+
+The Phase 1–4 refactor is implemented, but the following gaps were identified during the post-refactor review. They do not invalidate the shared-core architecture, but they prevent the implementation from fully satisfying the cache-equivalence and end-to-end parity goals described below.
+
+### 1. V1 cache hits can bypass the shared discovery pipeline
+
+When a fresh persisted V1 inventory is available, the V1 adapter currently reuses the cached rendered models directly. In that path, the models do not go through the current shared normalization, filtering, classification, enrichment, naming, and disambiguation pipeline.
+
+This can make cached and freshly discovered results differ when any of the following changes:
+
+- `smartModelName` is changed;
+- model filters are changed;
+- naming or owner-label logic is updated;
+- enrichment configuration changes;
+- a cached model no longer satisfies the current discovery rules.
+
+The cache behavior must remain backward compatible, but the adapter should either reapply the shared pipeline to cached raw model data or introduce a compatibility extraction path before the final V1 mapping. A cache schema redesign remains out of scope for the initial fix unless it is required to preserve raw model data reliably.
+
+### 2. V1 still has a legacy model-validity predicate (Resolved in Phase 5)
+
+The legacy `isValidModel` helper has been deprecated and updated to delegate directly to `isDiscoveredRawModel` / `normalizeDiscoveredRawModel`. The shared validation contract is now the single source of truth across V1, V2, and internal stores, strictly rejecting null, non-objects, and whitespace-only IDs.
+
+### 3. V2 mapping can overwrite explicit neutral limit values (Resolved in Phase 5)
+
+Previously, some enrichers wrote sentinel `limit.output = 0` values for context-only models, whereas the V2 mapper coerced non-positive output limits to 32,000, creating semantic drift between V1 and V2 models.
+
+This was resolved by establishing unified limit semantics via `createModelLimits`:
+- Positive explicit output limits are preserved (and bounded by context window);
+- When output is absent or non-positive, output safely falls back to `Math.min(context, DEFAULT_OUTPUT_TOKEN_LIMIT)` (where `DEFAULT_OUTPUT_TOKEN_LIMIT = 32_000`);
+- The sentinel `output = 0` is eliminated across all shared enrichers, ensuring complete parity between V1 drafts, V1 injected configurations, and V2 model editor projections.
+
+### 4. Owner resolution is duplicated across draft creation and naming (Resolved in Phase 5)
+
+Owner resolution has been unified into `resolveModelOwner` in `src/core/model-naming.ts`. It consistently enforces Rule 9 precedence (`raw.owned_by` preferred over model ID namespace prefix) across draft metadata extraction, collision disambiguation, and host model projection.
+
+### 5. V1 and V2 still duplicate model-info enricher resolution
+
+Both adapters independently resolve model-info formats, default endpoints, request headers, timeouts, and calls to `createModelEnricher`. Credentials and lifecycle behavior must remain adapter-owned, but the host-independent resolver logic can be shared to reduce future drift when a new model-info format is added.
+
+### 6. Existing parity tests do not cover both complete adapter projections
+
+The current parity tests exercise the shared pipeline and compare drafts with the V2 mapper projection, but they do not consistently execute the full V1 configuration path and the full V2 inventory path against the same provider response.
+
+Additional adapter-level parity tests are needed for common semantics such as IDs, display names, limits, modalities, reasoning, tool support, costs, variants, and compatibility. Host-specific output shape and lifecycle behavior should remain independently tested.
+
+### 7. V1 projection logic is embedded in the configuration enhancer
+
+The V1 draft-to-model mapping is currently performed inline in the large configuration enhancement flow. This makes the projection difficult to test independently and increases the risk of forgetting a field when the neutral draft evolves.
+
+A dedicated V1 mapper should be introduced, analogous to the V2 mapper, while preserving the V1-specific model shape and explicit-model merge behavior.
+
+## Phase 5: Cache and Projection Parity
+
+The next optimization phase should address the gaps above without changing public configuration paths, provider IDs, model IDs, or host lifecycle contracts.
+
+- Reapply the shared discovery pipeline to cached V1 model data, or add a compatibility extraction layer that allows current naming and filtering rules to be applied safely.
+- Replace the legacy V1 model-validity predicate with shared normalization and validation semantics.
+- Define and test the neutral limit contract for absent, zero, and positive values.
+- Preserve explicit neutral draft values in the V2 mapper instead of silently replacing them with host defaults.
+- Centralize owner extraction and display-label normalization in the shared core.
+- Extract V1 draft-to-model mapping into a dedicated adapter mapper.
+- Share host-independent model-info enricher resolution while keeping credentials, logging, network policy, and lifecycle operations in each adapter.
+- Add full V1/V2 adapter projection parity tests using equivalent raw provider responses.
+- Add cache regression tests covering changed filters, smart naming, enrichment settings, and collision disambiguation.
+
+Phase 5 must continue to preserve the existing cache schema unless a separate migration decision is made. Cache redesign, V2 persistence, and host-specific lifecycle changes remain separate concerns.
+
 ## Testing Strategy
 
 ### Unit Tests

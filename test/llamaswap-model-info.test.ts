@@ -15,7 +15,7 @@ describe('native llama-swap enricher', () => {
 
     expect(result).toEqual({
       metadataName: 'Gemma 4 31B IT',
-      limit: { context: 9216, output: 0 },
+      limit: { context: 9216, output: 9216 },
       modalities: { input: ['text', 'image'], output: ['text'] },
       toolCall: true,
     })

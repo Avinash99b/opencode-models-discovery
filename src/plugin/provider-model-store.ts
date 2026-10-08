@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { xdgData } from 'xdg-basedir'
-import { isValidModel } from '../utils/openai-compatible-api'
+import { isDiscoveredRawModel } from '../core/model-types'
 
 const STATE_VERSION = 2
 const PLUGIN_DATA_DIRECTORY = 'opencode-models-discovery'
@@ -46,7 +46,7 @@ function isProviderModelState(value: unknown): value is ProviderModelState {
   if (!isPlainObject(value) || value.version !== STATE_VERSION || !isIdentity(value.provider) ||
     typeof value.fetchedAt !== 'string' || !Number.isFinite(Date.parse(value.fetchedAt)) ||
     !isPlainObject(value.models) || !Object.entries(value.models).every(([modelID, model]) =>
-      modelID.length > 0 && isValidModel(model) && model.id === modelID)) {
+      modelID.length > 0 && isDiscoveredRawModel(model) && model.id === modelID)) {
     return false
   }
 

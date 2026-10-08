@@ -23,4 +23,19 @@ describe('shared discovery pipeline', () => {
     expect(drafts.map((draft) => draft.id)).toEqual(['openai/gpt-5', 'github-copilot/gpt-5'])
     expect(drafts.map((draft) => draft.name)).toEqual(['GPT 5 (Openai)', 'GPT 5 (Github Copilot)'])
   })
+
+  it('assigns organizationOwner preferring owned_by over ID namespace', () => {
+    const drafts = discoverModelDrafts([
+      { id: 'gateway/model-a', owned_by: 'anthropic' },
+      { id: 'meta/llama-3' },
+      { id: 'custom-model' },
+    ], {
+      filter: { includeBy: [], excludeBy: [], includeRegex: [], excludeRegex: [] },
+      smartModelName: false,
+    })
+
+    expect(drafts.find((d) => d.id === 'gateway/model-a')?.organizationOwner).toBe('anthropic')
+    expect(drafts.find((d) => d.id === 'meta/llama-3')?.organizationOwner).toBe('meta')
+    expect(drafts.find((d) => d.id === 'custom-model')?.organizationOwner).toBeUndefined()
+  })
 })

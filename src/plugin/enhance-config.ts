@@ -2,7 +2,8 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { xdgData } from 'xdg-basedir'
 import { ToastNotifier } from '../ui/toast-notifier'
-import { normalizeProviderOriginForCache, discoverModelsFromProvider, discoverModelInfoFromProvider, canDiscoverModels, isValidModel, DEFAULT_REQUEST_TIMEOUT_MS } from '../utils/openai-compatible-api'
+import { normalizeProviderOriginForCache, discoverModelsFromProvider, discoverModelInfoFromProvider, canDiscoverModels, DEFAULT_REQUEST_TIMEOUT_MS } from '../utils/openai-compatible-api'
+import { isDiscoveredRawModel } from '../core/model-types'
 import { createModelEnricher, isSupportedModelInfoFormat, type ModelEnricher } from '../utils/model-info'
 import { DEFAULT_CACHE_TTL_SECONDS, getDefaultDiscoveryConfigFromEnv, getProviderModelFieldFilters, getProviderModelRegexFilter, shouldDiscoverProviderWithOverride, ModelInfoFormat } from '../types/plugin-config'
 import { DEFAULT_MODELS_DEV_URL, fetchModelsDevData } from '../utils/models-dev-fetcher'
@@ -273,7 +274,7 @@ export async function enhanceConfig(
             continue
           }
 
-          models = discovery.models.filter(isValidModel)
+          models = discovery.models.filter(isDiscoveredRawModel)
         }
       } else {
         apiKey = await getProviderApiKey(providerName, p, client, resolvedProvidersLoader, logger)
@@ -286,7 +287,7 @@ export async function enhanceConfig(
           })
           continue
         }
-        models = discovery.models.filter(isValidModel)
+        models = discovery.models.filter(isDiscoveredRawModel)
       }
 
       let modelInfoEnricher: ModelEnricher | undefined

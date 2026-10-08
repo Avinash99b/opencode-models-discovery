@@ -1,5 +1,6 @@
 import type { LMStudioInventoryModel } from '../../types'
 import type { ModelEnricher } from '../../core/model-enrichment'
+import { createModelLimits } from '../../core/model-types'
 
 function hasUsableNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -67,9 +68,9 @@ export function createLMStudioEnricher(data: unknown): ModelEnricher {
       if (typeof displayName === 'string' && displayName.length > 0) result.metadataName = displayName
 
       const contextLimit = getLoadedContextLimit(inventoryModel) ?? (hasUsableNumber(inventoryModel.max_context_length) ? inventoryModel.max_context_length : undefined)
-      if (contextLimit) {
-        // OpenCode requires both fields when a limit object is present. Zero preserves its output-token fallback.
-        result.limit = { context: contextLimit, output: 0 }
+      const limits = createModelLimits(contextLimit)
+      if (limits) {
+        result.limit = limits
       }
 
       const capabilities = inventoryModel.capabilities && typeof inventoryModel.capabilities === 'object'

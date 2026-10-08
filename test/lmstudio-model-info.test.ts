@@ -18,7 +18,7 @@ describe('native LM Studio enricher', () => {
 
     expect(result).toEqual({
       metadataName: 'Gemma 4',
-      limit: { context: 16384, output: 0 },
+      limit: { context: 16384, output: 16384 },
       modalities: { input: ['text', 'image'], output: ['text'] },
       toolCall: true,
       reasoning: true,
@@ -31,14 +31,23 @@ describe('native LM Studio enricher', () => {
     })
   })
 
-  it('falls back to max context length and uses zero for output', () => {
+  it('falls back to max context length and resolves safe default output limit', () => {
     const result = createLMStudioEnricher({ models: [{
       key: 'local/model',
       max_context_length: 4096,
       loaded_instances: [{ config: { context_length: 0 } }],
     }] }).enrich({ id: 'local/model' }, { filterNonChat: true })
 
-    expect(result).toEqual({ limit: { context: 4096, output: 0 } })
+    expect(result).toEqual({ limit: { context: 4096, output: 4096 } })
+  })
+
+  it('caps output limit at DEFAULT_OUTPUT_TOKEN_LIMIT for large context windows', () => {
+    const result = createLMStudioEnricher({ models: [{
+      key: 'large/model',
+      max_context_length: 131072,
+    }] }).enrich({ id: 'large/model' }, { filterNonChat: true })
+
+    expect(result).toEqual({ limit: { context: 131072, output: 32000 } })
   })
 
   it('ignores incomplete instances and unknown reasoning options', () => {
@@ -49,7 +58,7 @@ describe('native LM Studio enricher', () => {
     }] }).enrich({ id: 'partial/model' }, { filterNonChat: true })
 
     expect(result).toEqual({
-      limit: { context: 2048, output: 0 },
+      limit: { context: 2048, output: 2048 },
       reasoning: true,
       variants: { medium: { reasoningEffort: 'medium' } },
     })
