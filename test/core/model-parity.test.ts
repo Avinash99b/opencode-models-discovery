@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { discoverModelDrafts } from '../../src/core/discovery-pipeline'
-import { mapToDiscoveredV2Model } from '../../src/v2/model-mapper'
+import { mapToV1Model } from '../../src/core/model-mapper'
+import { mapToDiscoveredV2Model } from '../../src/core/model-mapper'
 import type { ProviderDiscoveryOptions } from '../../src/v2/provider-config'
 import { createModelsDevEnricher } from '../../src/utils/model-info/models-dev'
 import { createBifrostEnricher } from '../../src/utils/model-info/bifrost'

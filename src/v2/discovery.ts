@@ -1,6 +1,6 @@
 import { type ConfiguredProvider, type DiscoveredV2Model, type Inventory } from "./catalog.js"
 import { type ProviderDiscoveryOptions } from "./provider-config.js"
-import { mapToDiscoveredV2Model } from "./model-mapper.js"
+import { mapToDiscoveredV2Model } from "../core/model-mapper.js"
 import { createModelEnricher, type ModelEnricher } from "../utils/model-info/index.js"
 import { ModelInfoFormat } from "../types/plugin-config.js"
 import { fetchModelsDevData, DEFAULT_MODELS_DEV_URL } from "../utils/models-dev-fetcher.js"

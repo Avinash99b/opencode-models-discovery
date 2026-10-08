@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { discoverModelDrafts } from "../../src/core/discovery-pipeline.js"
-import { mapToDiscoveredV2Model } from "../../src/v2/model-mapper.js"
+import { mapToDiscoveredV2Model } from "../../src/core/model-mapper.js"
 import { parseProviderDiscoveryOptions } from "../../src/v2/provider-config.js"
 import { createModelEnricher } from "../../src/utils/model-info/index.js"
 import { ModelInfoFormat } from "../../src/types/plugin-config.js"

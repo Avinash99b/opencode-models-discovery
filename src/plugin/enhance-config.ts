@@ -13,6 +13,7 @@ import type { PluginInput } from '@opencode-ai/plugin'
 import type { OpenAIModel } from '../types'
 import type { PluginConfig } from '../types/plugin-config'
 import { discoverModelDrafts } from '../core/discovery-pipeline'
+import { mapToV1Model } from '../core/model-mapper'
 
 interface DiscoveredProvider {
   name: string
@@ -355,23 +356,7 @@ export async function enhanceConfig(
           enrichmentContext: { filterNonChat },
         })
         for (const draft of drafts) {
-          const modelConfig: any = {
-            id: draft.id,
-            name: draft.name,
-          }
-          if (draft.organizationOwner) modelConfig.organizationOwner = draft.organizationOwner
-          if (draft.modalities) modelConfig.modalities = draft.modalities
-          if (draft.capabilities) modelConfig.capabilities = draft.capabilities
-          if (draft.limit) modelConfig.limit = draft.limit
-          if (draft.reasoning !== undefined) modelConfig.reasoning = draft.reasoning
-          if (draft.attachment !== undefined) modelConfig.attachment = draft.attachment
-          if (draft.toolCall !== undefined) modelConfig.tool_call = draft.toolCall
-          if (draft.structuredOutput !== undefined) modelConfig.structured_output = draft.structuredOutput
-          if (draft.temperature !== undefined) modelConfig.temperature = draft.temperature
-          if (draft.cost !== undefined) modelConfig.cost = draft.cost
-          if (draft.variants !== undefined) modelConfig.variants = draft.variants
-          if (draft.compatibility) modelConfig.compatibility = draft.compatibility
-          discoveredModels[draft.id] = modelConfig
+          discoveredModels[draft.id] = mapToV1Model(draft)
         }
       }
 
