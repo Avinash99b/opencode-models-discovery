@@ -1,4 +1,5 @@
 import type { ModelEnricher } from '../../core/model-enrichment'
+import type { NormalizedModelLimit } from '../../core/model-types'
 
 function hasUsableNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -37,7 +38,7 @@ export function createBifrostEnricher(_data: unknown): ModelEnricher {
       const output = model.max_output_tokens
       const result: {
         metadataName?: string
-        limit?: Record<string, number>
+        limit?: NormalizedModelLimit
         modalities?: { input?: string[]; output?: string[] }
         cost?: { input: number; output: number }
       } = {}

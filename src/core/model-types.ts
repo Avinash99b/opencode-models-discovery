@@ -12,7 +12,7 @@ export interface DiscoveredModelDraft {
   organizationOwner?: string
   readonly raw: DiscoveredRawModel
   capabilities?: Record<string, unknown>
-  limit?: Record<string, unknown>
+  limit?: NormalizedModelLimit
   modalities?: {
     input?: string[]
     output?: string[]
@@ -34,7 +34,6 @@ export interface NormalizedModelLimit {
   readonly context: number
   readonly output: number
   readonly input?: number
-  readonly [key: string]: unknown
 }
 
 /**

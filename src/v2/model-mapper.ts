@@ -30,10 +30,10 @@ export function mapToDiscoveredV2Model(
   }
 
   // Limits mapping
-  const rawLimit = resultDraft.limit ?? {}
-  const rawContext = typeof rawLimit.context === "number" && rawLimit.context > 0 ? rawLimit.context : undefined
-  const rawOutput = typeof rawLimit.output === "number" && rawLimit.output > 0 ? rawLimit.output : undefined
-  const rawInput = typeof rawLimit.input === "number" && rawLimit.input > 0 ? rawLimit.input : undefined
+  const rawLimit = resultDraft.limit
+  const rawContext = typeof rawLimit?.context === "number" && rawLimit.context > 0 ? rawLimit.context : undefined
+  const rawOutput = typeof rawLimit?.output === "number" && rawLimit.output > 0 ? rawLimit.output : undefined
+  const rawInput = typeof rawLimit?.input === "number" && rawLimit.input > 0 ? rawLimit.input : undefined
 
   const resolvedLimits = createModelLimits(rawContext ?? DEFAULT_CONTEXT_TOKEN_LIMIT, rawOutput, rawInput)!
   const limit: Record<string, unknown> = {
