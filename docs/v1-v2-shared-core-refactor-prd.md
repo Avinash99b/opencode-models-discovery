@@ -323,21 +323,17 @@ This was resolved by establishing unified limit semantics via `createModelLimits
 
 Owner resolution has been unified into `resolveModelOwner` in `src/core/model-naming.ts`. It consistently enforces Rule 9 precedence (`raw.owned_by` preferred over model ID namespace prefix) across draft metadata extraction, collision disambiguation, and host model projection.
 
-### 5. V1 and V2 still duplicate model-info enricher resolution
+### 5. V1 and V2 still duplicate model-info enricher resolution (Resolved in Phase 5)
 
-Both adapters independently resolve model-info formats, default endpoints, request headers, timeouts, and calls to `createModelEnricher`. Credentials and lifecycle behavior must remain adapter-owned, but the host-independent resolver logic can be shared to reduce future drift when a new model-info format is added.
+Enricher resolution has been extracted into `resolveModelInfoEnricher` in `src/core/enricher-resolver.ts`. Both V1 and V2 adapters share the exact same resolution rules for static index formats (`models.dev`, `aiproxy`), inline/zero-request formats (`bifrost`, `vllm`, `llama-swap`, `omniroute`), and remote provider endpoints (`litellm`, `lmstudio`). Credentials and transport bindings remain host-owned while format handling is 100% unified.
 
-### 6. Existing parity tests do not cover both complete adapter projections
+### 6. Existing parity tests do not cover both complete adapter projections (Resolved in Phase 5)
 
-The current parity tests exercise the shared pipeline and compare drafts with the V2 mapper projection, but they do not consistently execute the full V1 configuration path and the full V2 inventory path against the same provider response.
+End-to-end cross-adapter parity test suite has been established in `test/core/adapter-parity.test.ts`. Given the exact same raw provider responses and options, the tests verify that V1 (`mapToV1Model`) and V2 (`mapToDiscoveredV2Model`) produce identical model IDs, display names, context/output limits, modalities, reasoning flags, and tool-calling capabilities.
 
-Additional adapter-level parity tests are needed for common semantics such as IDs, display names, limits, modalities, reasoning, tool support, costs, variants, and compatibility. Host-specific output shape and lifecycle behavior should remain independently tested.
+### 7. V1 projection logic is embedded in the configuration enhancer (Resolved in Phase 5)
 
-### 7. V1 projection logic is embedded in the configuration enhancer
-
-The V1 draft-to-model mapping is currently performed inline in the large configuration enhancement flow. This makes the projection difficult to test independently and increases the risk of forgetting a field when the neutral draft evolves.
-
-A dedicated V1 mapper should be introduced, analogous to the V2 mapper, while preserving the V1-specific model shape and explicit-model merge behavior.
+Model projection logic for both V1 and V2 has been consolidated into `src/core/model-mapper.ts` (`mapToV1Model` and `mapToDiscoveredV2Model`). The V1 mapper is independently tested and guarantees consistent translation from neutral discovery drafts.
 
 ## Phase 5: Cache and Projection Parity
 
