@@ -5,6 +5,7 @@ import { parseProviderDiscoveryOptions, type ProviderDiscoveryOptions } from "./
 import { registerDiscoveryTools } from "./tools.js"
 import { registerRefreshCommand } from "./commands.js"
 import type { RefreshResult } from "./tools.js"
+import { createV2StorageCache } from "./storage-cache.js"
 
 const integrationPrefix = "opencode.models-discovery"
 
@@ -129,7 +130,7 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
     const integrations = providers.map((provider) => integrationID(provider.id))
     if (integrations.length > 0) await ctx.integration.reload()
     const resolved = await resolveProviderCredentials(ctx, providers)
-    const inventory = await discoverInventory(resolved, discovery, fetch, ctx.storage)
+    const inventory = await discoverInventory(resolved, discovery, fetch, ctx.storage ? createV2StorageCache(ctx.storage) : undefined)
     await controller.replaceInventory(inventory)
     return controller.status()
   }

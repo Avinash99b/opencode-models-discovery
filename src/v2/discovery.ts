@@ -6,39 +6,15 @@ import { ModelInfoFormat } from "../types/plugin-config.js"
 import { fetchModelsDevData, DEFAULT_MODELS_DEV_URL } from "../utils/models-dev-fetcher.js"
 import { discoverModelDrafts } from "../core/discovery-pipeline.js"
 import type { ModelEnrichmentResult, ModelEnricher } from "../core/model-enrichment.js"
+import { createDiscoveryCacheEntry, discoveryCacheKey, readDiscoveryCache, writeDiscoveryCache, type DiscoveryCacheBackend, type DiscoveryCacheEntry } from "../core/discovery-cache.js"
 
 export interface CatalogProvider extends ConfiguredProvider {
   /** Ephemeral request credential resolved by the plugin refresh orchestration. */
   readonly apiKey?: string
 }
 
-export interface DiscoveryStorage {
-  readonly get: (key: string) => Promise<JsonValue | undefined>
-  readonly set: (key: string, value: JsonValue) => Promise<void>
-  readonly remove?: (key: string) => Promise<void>
-}
-
-type JsonValue = null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue }
-
-interface V2DiscoveryCacheEntry {
-  readonly version: 1
-  readonly identity: { readonly providerID: string; readonly baseURL: string; readonly endpoint: string }
-  readonly fetchedAt: string
-  readonly rawModels: readonly Record<string, unknown>[]
-  readonly enrichments: Record<string, ModelEnrichmentResult>
-}
-
 const DEFAULT_LITELLM_ENDPOINT = "/v1/model/info"
 const DEFAULT_LMSTUDIO_ENDPOINT = "/api/v1/models"
-
-function cacheKey(providerID: string): string {
-  return `opencode.models-discovery.v2:provider:${encodeURIComponent(providerID)}`
-}
-
-function isFresh(value: string, ttlSeconds: number): boolean {
-  const timestamp = Date.parse(value)
-  return Number.isFinite(timestamp) && timestamp + ttlSeconds * 1000 > Date.now()
-}
 
 function cachedEnricher(enrichments: Record<string, ModelEnrichmentResult>): ModelEnricher {
   return {
@@ -46,19 +22,6 @@ function cachedEnricher(enrichments: Record<string, ModelEnrichmentResult>): Mod
       return enrichments[model.id] ?? {}
     },
   }
-}
-
-function isCacheEntry(value: unknown, providerID: string, baseURL: string, endpoint: string, ttlSeconds: number): value is V2DiscoveryCacheEntry {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false
-  const entry = value as Partial<V2DiscoveryCacheEntry>
-  return entry.version === 1 &&
-    entry.identity?.providerID === providerID &&
-    entry.identity.baseURL === baseURL &&
-    entry.identity.endpoint === endpoint &&
-    typeof entry.fetchedAt === "string" &&
-    isFresh(entry.fetchedAt, ttlSeconds) &&
-    Array.isArray(entry.rawModels) &&
-    !!entry.enrichments && typeof entry.enrichments === "object" && !Array.isArray(entry.enrichments)
 }
 
 async function resolveModelInfoEnricher(
@@ -118,7 +81,7 @@ export async function discoverInventory(
   providers: readonly CatalogProvider[],
   discovery: ReadonlyMap<string, ProviderDiscoveryOptions>,
   fetcher: typeof fetch = fetch,
-  storage?: DiscoveryStorage,
+  storage?: DiscoveryCacheBackend,
 ): Promise<Inventory> {
   const inventory: Inventory = new Map()
 
@@ -132,14 +95,15 @@ export async function discoverInventory(
     const cacheConfig = config.cache
     const cacheEnabled = cacheConfig?.enabled === true && storage !== undefined
     const endpoint = config.endpoint
-    let cached: V2DiscoveryCacheEntry | undefined
+    let cached: DiscoveryCacheEntry | undefined
     if (cacheEnabled) {
-      try {
-        const value = await storage.get(cacheKey(provider.id))
-        if (isCacheEntry(value, provider.id, baseURL, endpoint, cacheConfig.ttlSeconds)) cached = value
-      } catch {
-        // Cache failures must not block discovery.
-      }
+      cached = await readDiscoveryCache(storage, discoveryCacheKey("opencode.models-discovery.v2", provider.id), {
+        providerID: provider.id,
+        baseURL,
+        endpoint,
+        modelInfoFormat: config.modelInfoFormat,
+        modelInfoEndpoint: config.modelInfoEndpoint,
+      }, cacheConfig.ttlSeconds)
     }
 
     const resolvedApiKey = typeof provider.apiKey === "string" && provider.apiKey.trim().length > 0
@@ -196,19 +160,15 @@ export async function discoverInventory(
 
         inventory.set(provider.id, models)
         if (cacheEnabled && !cached) {
-          try {
-            await storage.set(cacheKey(provider.id), {
-              version: 1,
-              identity: { providerID: provider.id, baseURL, endpoint },
-              fetchedAt: new Date().toISOString(),
-              rawModels: rawModels.filter((model): model is Record<string, unknown> =>
+          await writeDiscoveryCache(storage, discoveryCacheKey("opencode.models-discovery.v2", provider.id), createDiscoveryCacheEntry({
+              providerID: provider.id,
+              baseURL,
+              endpoint,
+              modelInfoFormat: config.modelInfoFormat,
+              modelInfoEndpoint: config.modelInfoEndpoint,
+            }, rawModels.filter((model): model is Record<string, unknown> =>
                 !!model && typeof model === "object" && !Array.isArray(model) && typeof (model as Record<string, unknown>).id === "string"
-              ),
-              enrichments,
-            } as unknown as JsonValue)
-          } catch {
-            // Cache failures must not block discovery.
-          }
+              ), enrichments))
         }
     } catch {
       // Network and parsing failures are non-fatal; existing discovered models remain untouched.
