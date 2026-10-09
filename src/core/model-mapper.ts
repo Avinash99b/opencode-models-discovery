@@ -104,8 +104,7 @@ export function mapToDiscoveredV2Model(
     ? resultDraft.reasoning
     : (
         rawModel.supports_reasoning === true ||
-        (rawModel.capabilities && typeof rawModel.capabilities === 'object' && (rawModel.capabilities as Record<string, unknown>).reasoning === true) ||
-        /(?:^|[-_/])(r1|reasoner|thinking|reasoning)(?:[-_/]|$)/i.test(resultDraft.id)
+        (rawModel.capabilities && typeof rawModel.capabilities === 'object' && (rawModel.capabilities as Record<string, unknown>).reasoning === true)
       )
 
   if (isReasoning) {

@@ -113,9 +113,18 @@ describe("V2 model-mapper", () => {
     ]))
   })
 
-  it("auto-injects thinking variants for models with r1 or reasoning in id", () => {
+  it("does not guess reasoning purely from model id naming", () => {
     const options = parseProviderDiscoveryOptions({ enabled: true })!
     const mapped = mapToDiscoveredV2Model(discover({ id: "deepseek-r1-distill" }), options)
+
+    expect(mapped.reasoning).toBeUndefined()
+    expect(mapped.compatibility?.reasoningField).toBeUndefined()
+    expect(mapped.variants).toBeUndefined()
+  })
+
+  it("injects reasoning capability and default variants when explicitly flagged by raw model", () => {
+    const options = parseProviderDiscoveryOptions({ enabled: true })!
+    const mapped = mapToDiscoveredV2Model(discover({ id: "deepseek-r1-distill", supports_reasoning: true }), options)
 
     expect(mapped.reasoning).toBe(true)
     expect(mapped.compatibility?.reasoningField).toBe("reasoning_content")
