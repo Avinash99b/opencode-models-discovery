@@ -129,7 +129,7 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
     const integrations = providers.map((provider) => integrationID(provider.id))
     if (integrations.length > 0) await ctx.integration.reload()
     const resolved = await resolveProviderCredentials(ctx, providers)
-    const inventory = await discoverInventory(resolved, discovery)
+    const inventory = await discoverInventory(resolved, discovery, fetch, ctx.storage)
     await controller.replaceInventory(inventory)
     return controller.status()
   }

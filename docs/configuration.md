@@ -38,7 +38,7 @@ OpenCode v2 uses `plugins` and `providers`. The plugin can be declared directly 
 
 The V2 options are the same discovery options described below, except that their path starts with `providers.<id>.settings.modelsDiscovery`. V2 defaults the discovery endpoint to `/v1/models`, uses a default request timeout of 5000 ms, and requires `enabled: true` for the provider to participate. When discovery is explicitly enabled, the adapter attempts the configured model-list endpoint regardless of the provider package; the endpoint must return an OpenAI-compatible model-list response. For a provider such as DeepSeek that exposes `/models`, set `"endpoint": "/models"`. Local plugin development should use a directory URL such as `file:///absolute/path/to/opencode-models-discovery/dist`; OpenCode v2 does not accept a direct path to a JavaScript entry file.
 
-The V2 adapter does not implement the V1 persisted disk cache or V1 auth-store fallback. It provides the `/models-discovery-refresh` command and the `models_discovery_refresh` and `models_discovery_status` agent tools. After rebuilding a local plugin, restart the OpenCode v2 background service with `opencode service restart`.
+The V2 adapter does not use the V1 persisted disk cache or V1 auth-store fallback. When enabled, V2 stores its discovery cache through the host-provided `ctx.storage` API. It provides the `/models-discovery-refresh` command and the `models_discovery_refresh` and `models_discovery_status` agent tools. After rebuilding a local plugin, restart the OpenCode v2 background service with `opencode service restart`.
 
 ## OpenCode v1 configuration
 
@@ -123,6 +123,8 @@ For a provider whose models or provider-specific metadata endpoint needs more th
 ```
 
 This allows up to `15000` milliseconds for each discovery request to `slow-gateway` and raises the config hook wait budget to the same value. Other providers keep their own request timeouts.
+
+For V2, enabled caches are stored through OpenCode's `ctx.storage` rather than as hand-editable files. The cache stores the provider's valid raw discovery models and the enrichment results needed to rebuild the current V2 projection. A fresh cache hit skips provider and metadata requests but re-runs the shared normalization, filtering, classification, enrichment, naming, and V2 mapping pipeline. This keeps cache behavior aligned with current discovery rules, while the host-managed storage boundary means users cannot conveniently edit the cache by hand.
 
 ## Persisted Model Discovery Cache
 
