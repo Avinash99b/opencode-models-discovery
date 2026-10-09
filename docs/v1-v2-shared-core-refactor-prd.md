@@ -335,6 +335,16 @@ End-to-end cross-adapter parity test suite has been established in `test/core/ad
 
 Model projection logic for both V1 and V2 has been consolidated into `src/core/model-mapper.ts` (`mapToV1Model` and `mapToDiscoveredV2Model`). The V1 mapper is independently tested and guarantees consistent translation from neutral discovery drafts.
 
+### 8. Heuristic model ID reasoning guessing removed (Resolved in Phase 5)
+
+Previously, `mapToDiscoveredV2Model` contained a regex-based heuristic (`/(?:^|[-_/])(r1|reasoner|thinking|reasoning)(?:[-_/]|$)/i`) that guessed reasoning capabilities solely from the model ID. This heuristic introduced semantic divergence between V1 and V2 and risked false positives.
+
+The heuristic has been removed. Reasoning capability is now strictly determined by authoritative sources:
+- Explicit enricher resolution on the neutral draft (`draft.reasoning`);
+- Explicit raw model flags (`raw.supports_reasoning === true` or `raw.capabilities.reasoning === true`).
+
+When reasoning capability is explicitly present, the V2 mapper safely applies `compatibility.reasoningField = 'reasoning_content'` and default reasoning effort variants (`low`, `medium`, `high`) without guessing.
+
 ## Phase 5: Cache and Projection Parity
 
 The next optimization phase should address the gaps above without changing public configuration paths, provider IDs, model IDs, or host lifecycle contracts.
@@ -348,6 +358,7 @@ The next optimization phase should address the gaps above without changing publi
 - Share host-independent model-info enricher resolution while keeping credentials, logging, network policy, and lifecycle operations in each adapter.
 - Add full V1/V2 adapter projection parity tests using equivalent raw provider responses.
 - Add cache regression tests covering changed filters, smart naming, enrichment settings, and collision disambiguation.
+- Eliminate heuristic model ID guessing for capabilities across all adapters to ensure deterministic, metadata-backed projection.
 
 Phase 5 must continue to preserve the existing cache schema unless a separate migration decision is made. Cache redesign, V2 persistence, and host-specific lifecycle changes remain separate concerns.
 
