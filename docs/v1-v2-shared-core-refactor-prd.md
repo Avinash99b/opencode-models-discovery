@@ -292,7 +292,7 @@ The refactor must preserve:
 
 The Phase 1–4 refactor is implemented, but the following gaps were identified during the post-refactor review. They do not invalidate the shared-core architecture, but they prevent the implementation from fully satisfying the cache-equivalence and end-to-end parity goals described below.
 
-### 1. V1 cache hits can bypass the shared discovery pipeline
+### 1. V1 cache hits can bypass the shared discovery pipeline (Resolved in Phase 5)
 
 When a fresh persisted V1 inventory is available, the V1 adapter currently reuses the cached rendered models directly. In that path, the models do not go through the current shared normalization, filtering, classification, enrichment, naming, and disambiguation pipeline.
 
@@ -304,7 +304,7 @@ This can make cached and freshly discovered results differ when any of the follo
 - enrichment configuration changes;
 - a cached model no longer satisfies the current discovery rules.
 
-The cache behavior must remain backward compatible, but the adapter should either reapply the shared pipeline to cached raw model data or introduce a compatibility extraction path before the final V1 mapping. A cache schema redesign remains out of scope for the initial fix unless it is required to preserve raw model data reliably.
+New cache entries now preserve the filtered raw discovery models alongside the rendered V1 models. On a fresh cache hit, the adapter re-applies the shared normalization, filtering, classification, enrichment, naming, disambiguation, and V1 mapping pipeline using the cached raw models. Existing cache entries without `rawModels` remain readable through the legacy rendered-model compatibility path. Overrides continue to be applied after the pipeline projection.
 
 ### 2. V1 still has a legacy model-validity predicate (Resolved in Phase 5)
 

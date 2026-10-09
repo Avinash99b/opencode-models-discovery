@@ -664,6 +664,9 @@ describe('ModelDiscovery Plugin', () => {
         }),
       })
       expect(state?.models['embedding-model']).toBeUndefined()
+      expect(state?.rawModels).toEqual({
+        'chat-model': { id: 'chat-model', object: 'model', max_model_len: 32768 },
+      })
 
       const secondConfig: any = {
         provider: {

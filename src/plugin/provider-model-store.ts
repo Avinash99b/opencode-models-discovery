@@ -20,6 +20,8 @@ export interface ProviderModelState {
   provider: ProviderModelStoreIdentity
   fetchedAt: string
   models: Record<string, Record<string, unknown> & { id: string }>
+  /** Raw discovery responses used to re-run the shared pipeline on cache hits. */
+  rawModels?: Record<string, Record<string, unknown> & { id: string }>
   overrides?: Record<string, ProviderModelOverride>
 }
 
@@ -50,7 +52,9 @@ function isProviderModelState(value: unknown): value is ProviderModelState {
     return false
   }
 
-  return value.overrides === undefined || isOverrides(value.overrides)
+  return (value.rawModels === undefined || (isPlainObject(value.rawModels) && Object.entries(value.rawModels).every(([modelID, model]) =>
+    modelID.length > 0 && isDiscoveredRawModel(model) && model.id === modelID
+  ))) && (value.overrides === undefined || isOverrides(value.overrides))
 }
 
 function removeSensitiveFields(value: unknown): unknown {
@@ -117,7 +121,8 @@ export class ProviderModelStore {
   async saveModels(
     identity: ProviderModelStoreIdentity,
     models: Record<string, Record<string, unknown> & { id: string }>,
-    previousState?: ProviderModelState
+    previousState?: ProviderModelState,
+    rawModels?: Record<string, Record<string, unknown> & { id: string }>,
   ): Promise<boolean> {
     const statePath = this.getStatePath(identity.id)
     if (!statePath) {
@@ -129,6 +134,7 @@ export class ProviderModelStore {
       provider: identity,
       fetchedAt: new Date().toISOString(),
       models: sanitizeModels(models),
+      ...(rawModels ? { rawModels: sanitizeModels(rawModels) } : {}),
       ...(previousState?.overrides && Object.keys(previousState.overrides).length > 0
         ? { overrides: previousState.overrides }
         : {}),
