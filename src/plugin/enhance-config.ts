@@ -2,11 +2,10 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { xdgData } from 'xdg-basedir'
 import { ToastNotifier } from '../ui/toast-notifier'
-import { normalizeProviderOriginForCache, discoverModelsFromProvider, discoverModelInfoFromProvider, canDiscoverModels, DEFAULT_REQUEST_TIMEOUT_MS } from '../utils/openai-compatible-api'
+import { normalizeProviderOriginForCache, discoverModelsFromProvider, canDiscoverModels, DEFAULT_REQUEST_TIMEOUT_MS } from '../utils/openai-compatible-api'
 import { isDiscoveredRawModel } from '../core/model-types'
-import { createModelEnricher, isSupportedModelInfoFormat, type ModelEnricher } from '../utils/model-info'
-import { DEFAULT_CACHE_TTL_SECONDS, getDefaultDiscoveryConfigFromEnv, getProviderModelFieldFilters, getProviderModelRegexFilter, shouldDiscoverProviderWithOverride, ModelInfoFormat } from '../types/plugin-config'
-import { DEFAULT_MODELS_DEV_URL, fetchModelsDevData } from '../utils/models-dev-fetcher'
+import { type ModelEnricher } from '../utils/model-info'
+import { DEFAULT_CACHE_TTL_SECONDS, getDefaultDiscoveryConfigFromEnv, getProviderModelFieldFilters, getProviderModelRegexFilter, shouldDiscoverProviderWithOverride } from '../types/plugin-config'
 import { isInventoryFresh, mergeModelOverride, ProviderModelStore, type ProviderModelState } from './provider-model-store'
 import type { PluginLogger } from './logger'
 import type { ModelEnrichmentResult } from '../core/model-enrichment'
@@ -14,6 +13,7 @@ import type { PluginInput } from '@opencode-ai/plugin'
 import type { PluginConfig } from '../types/plugin-config'
 import { discoverModelDrafts } from '../core/discovery-pipeline'
 import { mapToV1Model } from '../core/model-mapper'
+import { resolveModelInfoEnricher } from '../core/enricher-resolver'
 
 interface DiscoveredProvider {
   name: string
@@ -38,8 +38,6 @@ interface OpenCodeAuth {
 type HostClient = 'opencode' | 'mimocode'
 
 const RESOLVED_PROVIDERS_TIMEOUT_MS = 250
-const DEFAULT_LITELLM_MODEL_INFO_ENDPOINT = '/v1/model/info'
-const DEFAULT_LMSTUDIO_MODELS_ENDPOINT = '/api/v1/models'
 const defaultProviderModelStore = new ProviderModelStore()
 
 export const providerModelStoreTestUtils = {
@@ -327,48 +325,21 @@ export async function enhanceConfig(
       }
 
       let modelInfoEnricher: ModelEnricher | undefined
-      if (!usingPersistedModels && modelInfoFormat && !isSupportedModelInfoFormat(modelInfoFormat)) {
-        logger.warn('Unsupported provider model info format', {
-          provider: providerName,
+      if (!usingPersistedModels) {
+        modelInfoEnricher = await resolveModelInfoEnricher({
+          baseURL,
+          apiKey,
+          providerName,
+          logger: {
+            warn: (message, context) => logger.warn(message, context),
+            info: (message, context) => logger.info(message, context),
+          },
+        }, {
           format: modelInfoFormat,
+          endpoint: providerDiscoveryConfig.modelInfoEndpoint,
+          filterNonChat,
+          timeoutMs,
         })
-      } else if (!usingPersistedModels && (modelInfoFormat === ModelInfoFormat.ModelsDev || modelInfoFormat === ModelInfoFormat.AIProxy)) {
-        const modelInfoEndpoint = providerDiscoveryConfig.modelInfoEndpoint ?? DEFAULT_MODELS_DEV_URL
-        const modelsDevCache = await fetchModelsDevData(modelInfoEndpoint)
-        modelInfoEnricher = createModelEnricher(modelInfoFormat, modelsDevCache, { filterNonChat })
-        logger.info('Loaded models.dev data', {
-          provider: providerName,
-          endpoint: modelInfoEndpoint,
-          count: modelsDevCache.size,
-        })
-      } else if (!usingPersistedModels && (modelInfoFormat === ModelInfoFormat.Bifrost || modelInfoFormat === ModelInfoFormat.LlamaSwap || modelInfoFormat === ModelInfoFormat.OmniRoute || modelInfoFormat === ModelInfoFormat.VLLM)) {
-        modelInfoEnricher = createModelEnricher(modelInfoFormat, null)
-      } else if (!usingPersistedModels && modelInfoFormat === ModelInfoFormat.LMStudio) {
-        const modelInfoEndpoint = providerDiscoveryConfig.modelInfoEndpoint ?? DEFAULT_LMSTUDIO_MODELS_ENDPOINT
-        const modelInfoDiscovery = await discoverModelInfoFromProvider(baseURL, apiKey, modelInfoEndpoint, timeoutMs)
-        if (modelInfoDiscovery.ok) {
-          modelInfoEnricher = createModelEnricher(modelInfoFormat, modelInfoDiscovery.data)
-        } else {
-          logger.warn('Provider model info discovery failed', {
-            provider: providerName,
-            baseURL,
-            endpoint: modelInfoEndpoint,
-            format: modelInfoFormat,
-          })
-        }
-      } else if (!usingPersistedModels && modelInfoFormat === ModelInfoFormat.LiteLLM) {
-        const modelInfoEndpoint = providerDiscoveryConfig.modelInfoEndpoint ?? DEFAULT_LITELLM_MODEL_INFO_ENDPOINT
-        const modelInfoDiscovery = await discoverModelInfoFromProvider(baseURL, apiKey, modelInfoEndpoint, timeoutMs)
-        if (modelInfoDiscovery.ok) {
-          modelInfoEnricher = createModelEnricher(modelInfoFormat, modelInfoDiscovery.data, { filterNonChat })
-        } else {
-          logger.warn('Provider model info discovery failed', {
-            provider: providerName,
-            baseURL,
-            endpoint: modelInfoEndpoint,
-            format: modelInfoFormat,
-          })
-        }
       }
       if (reprocessPersistedModels) {
         modelInfoEnricher = createCachedModelEnricher(persistedState?.models ?? {})
