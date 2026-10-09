@@ -36,6 +36,7 @@ export interface ProviderController {
   readonly transform: (editor: Parameters<Plugin.Context["provider"]["transform"]>[0] extends (editor: infer Draft) => void ? Draft : never) => void
   readonly replaceInventory: (next: Inventory) => Promise<void>
   readonly status: () => { providers: number; models: number }
+  readonly getInventory: () => Inventory
 }
 
 function copyInventory(inventory: Inventory): Inventory {
@@ -93,6 +94,9 @@ export function createProviderController(
         providers: inventory.size,
         models: [...inventory.values()].reduce((total, models) => total + models.size, 0),
       }
+    },
+    getInventory() {
+      return copyInventory(inventory)
     },
   }
 }

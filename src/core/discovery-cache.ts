@@ -65,7 +65,30 @@ export function createDiscoveryCacheEntry(
   enrichments: Record<string, ModelEnrichmentResult>,
   fetchedAt: string = new Date().toISOString(),
 ): DiscoveryCacheEntry {
-  return { version: 1, identity, fetchedAt, rawModels, enrichments }
+  return {
+    version: 1,
+    identity,
+    fetchedAt,
+    rawModels: sanitizeSensitiveFields(rawModels) as readonly Record<string, unknown>[],
+    enrichments: sanitizeSensitiveFields(enrichments) as Record<string, ModelEnrichmentResult>,
+  }
+}
+
+export function sanitizeSensitiveFields(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeSensitiveFields)
+  }
+  if (!value || typeof value !== 'object') {
+    return value
+  }
+  const cleaned: Record<string, unknown> = {}
+  for (const [key, child] of Object.entries(value)) {
+    if (/^(api[-_]?key|authorization|token|password|secret|credentials?)$/i.test(key)) {
+      continue
+    }
+    cleaned[key] = sanitizeSensitiveFields(child)
+  }
+  return cleaned
 }
 
 export async function readDiscoveryCache(

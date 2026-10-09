@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { xdgData } from 'xdg-basedir'
 import { isDiscoveredRawModel } from '../core/model-types'
+import { sanitizeSensitiveFields } from '../core/discovery-cache'
 
 const STATE_VERSION = 2
 const PLUGIN_DATA_DIRECTORY = 'opencode-models-discovery'
@@ -57,29 +58,10 @@ function isProviderModelState(value: unknown): value is ProviderModelState {
   ))) && (value.overrides === undefined || isOverrides(value.overrides))
 }
 
-function removeSensitiveFields(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(removeSensitiveFields)
-  }
-
-  if (!isPlainObject(value)) {
-    return value
-  }
-
-  const cleaned: Record<string, unknown> = {}
-  for (const [key, child] of Object.entries(value)) {
-    if (/^(api[-_]?key|authorization|token|password|secret|credentials?)$/i.test(key)) {
-      continue
-    }
-    cleaned[key] = removeSensitiveFields(child)
-  }
-  return cleaned
-}
-
 function sanitizeModels(models: Record<string, Record<string, unknown> & { id: string }>): Record<string, Record<string, unknown> & { id: string }> {
   return Object.fromEntries(Object.entries(models).map(([modelID, model]) => [
     modelID,
-    removeSensitiveFields(model) as Record<string, unknown> & { id: string },
+    sanitizeSensitiveFields(model) as Record<string, unknown> & { id: string },
   ]))
 }
 
