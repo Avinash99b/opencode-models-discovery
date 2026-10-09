@@ -1,5 +1,6 @@
 import type { LiteLLMModelInfo, LiteLLMModelInfoEntry } from '../../types'
 import type { ModelEnricher, ModelEnrichmentResult } from '../../core/model-enrichment'
+import type { NormalizedModelLimit } from '../../core/model-types'
 
 function hasUsableNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -137,7 +138,7 @@ function getLiteLLMModelInfo(entry: LiteLLMModelInfoEntry | undefined): ModelEnr
 
   const result: {
     modalities?: { input: string[]; output: string[] }
-    limit?: Record<string, unknown>
+    limit?: NormalizedModelLimit
     reasoning?: boolean
     variants?: Record<string, any>
     cost?: Record<string, unknown>

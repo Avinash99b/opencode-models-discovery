@@ -1,4 +1,5 @@
 import type { ModelEnricher } from '../../core/model-enrichment'
+import { createModelLimits } from '../../core/model-types'
 
 function hasUsableNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -46,12 +47,8 @@ export function createLlamaSwapEnricher(_data: unknown): ModelEnricher {
           : undefined
         const output = hasNonNegativeNumber(llamaSwapMetadata?.max_output_tokens)
           ? llamaSwapMetadata.max_output_tokens
-          : 0
-        result.limit = {
-          context,
-          ...(input ? { input } : {}),
-          output,
-        }
+          : undefined
+        result.limit = createModelLimits(context, output, input)
       }
 
       const architecture = getRecord(model.architecture)

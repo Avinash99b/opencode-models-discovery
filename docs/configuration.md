@@ -38,7 +38,7 @@ OpenCode v2 uses `plugins` and `providers`. The plugin can be declared directly 
 
 The V2 options are the same discovery options described below, except that their path starts with `providers.<id>.settings.modelsDiscovery`. V2 defaults the discovery endpoint to `/v1/models`, uses a default request timeout of 5000 ms, and requires `enabled: true` for the provider to participate. When discovery is explicitly enabled, the adapter attempts the configured model-list endpoint regardless of the provider package; the endpoint must return an OpenAI-compatible model-list response. For a provider such as DeepSeek that exposes `/models`, set `"endpoint": "/models"`. Local plugin development should use a directory URL such as `file:///absolute/path/to/opencode-models-discovery/dist`; OpenCode v2 does not accept a direct path to a JavaScript entry file.
 
-The V2 adapter does not implement the V1 persisted disk cache or V1 auth-store fallback. It provides the `/models-discovery-refresh` command and the `models_discovery_refresh` and `models_discovery_status` agent tools. After rebuilding a local plugin, restart the OpenCode v2 background service with `opencode service restart`.
+The V2 adapter does not use the V1 persisted disk cache or V1 auth-store fallback. When enabled, V2 stores its discovery cache through the host-provided `ctx.storage` API. It provides the `/models-discovery-refresh` command and the `models_discovery_refresh` and `models_discovery_status` agent tools. After rebuilding a local plugin, restart the OpenCode v2 background service with `opencode service restart`.
 
 ## OpenCode v1 configuration
 
@@ -123,6 +123,8 @@ For a provider whose models or provider-specific metadata endpoint needs more th
 ```
 
 This allows up to `15000` milliseconds for each discovery request to `slow-gateway` and raises the config hook wait budget to the same value. Other providers keep their own request timeouts.
+
+For V2, enabled caches are stored through OpenCode's `ctx.storage` rather than as hand-editable files. The cache stores the provider's valid raw discovery models and the enrichment results needed to rebuild the current V2 projection. A fresh cache hit skips provider and metadata requests but re-runs the shared normalization, filtering, classification, enrichment, naming, and V2 mapping pipeline. This keeps cache behavior aligned with current discovery rules, while the host-managed storage boundary means users cannot conveniently edit the cache by hand.
 
 ## Persisted Model Discovery Cache
 
@@ -375,7 +377,7 @@ Use `modelInfoFormat: "llama-swap"` for a [llama-swap](https://github.com/mostly
 }
 ```
 
-For each discovered model, the plugin maps `context_length` to `limit.context`, falling back to `meta.n_ctx`. Because llama-swap does not report a distinct output limit, the plugin writes `limit.output: 0` to preserve OpenCode's output-token fallback. Optional `meta.llamaswap.max_input_tokens` and `meta.llamaswap.max_output_tokens` values override the corresponding limits when present. It maps `architecture.input_modalities` and `architecture.output_modalities` to lower-case OpenCode modalities, and maps `capabilities.function_calling` or a `tools` entry in `supported_parameters` to `tool_call`. When `smartModelName: true` is set, a non-empty llama-swap `name` becomes the display name. Missing or malformed metadata is left unset.
+For each discovered model, the plugin maps `context_length` to `limit.context`, falling back to `meta.n_ctx`. Because llama-swap does not always report a distinct output limit, the plugin resolves a safe default output limit bounded by the context window and capped at OpenCode's default 32,000 output tokens. Optional `meta.llamaswap.max_input_tokens` and `meta.llamaswap.max_output_tokens` values override the corresponding limits when present. It maps `architecture.input_modalities` and `architecture.output_modalities` to lower-case OpenCode modalities, and maps `capabilities.function_calling` or a `tools` entry in `supported_parameters` to `tool_call`. When `smartModelName: true` is set, a non-empty llama-swap `name` becomes the display name. Missing or malformed metadata is left unset.
 
 ### OmniRoute Model Info
 
@@ -527,7 +529,7 @@ Use `modelInfoFormat: "lmstudio"` with LM Studio 0.4.0+, which officially releas
 
 Only models returned by `/v1/models` are injected. A model is enriched only when its `id` exactly matches an inventory `key`; inventory-only models are not injected. `modelsDiscovery.endpoint` controls discovery, while `modelsDiscovery.modelInfoEndpoint` controls the inventory request.
 
-When available, the plugin sets `limit.context` from the largest loaded instance `config.context_length`, otherwise it uses `max_context_length`. LM Studio does not report a distinct output limit, so the plugin writes `limit.output: 0`: this satisfies OpenCode's requirement that a limit object include both context and output while preserving OpenCode's default or configured output-token fallback. The plugin maps `capabilities.vision` to image input and `capabilities.trained_for_tool_use` to `tool_call`. Its reported reasoning options are the source of truth for variants: `off`, `low`, `medium`, `high`, and `xhigh` become variants, with `off` sent as `reasoningEffort: "none"`; `on` and unknown options are omitted because they are not concrete OpenAI-compatible efforts. Missing or malformed metadata is left unset without preventing discovery.
+When available, the plugin sets `limit.context` from the largest loaded instance `config.context_length`, otherwise it uses `max_context_length`. LM Studio does not report a distinct output limit, so the plugin resolves a safe default output limit bounded by the context window and capped at OpenCode's default 32,000 output tokens. The plugin maps `capabilities.vision` to image input and `capabilities.trained_for_tool_use` to `tool_call`. Its reported reasoning options are the source of truth for variants: `off`, `low`, `medium`, `high`, and `xhigh` become variants, with `off` sent as `reasoningEffort: "none"`; `on` and unknown options are omitted because they are not concrete OpenAI-compatible efforts. Missing or malformed metadata is left unset without preventing discovery.
 
 ### models.dev Metadata
 

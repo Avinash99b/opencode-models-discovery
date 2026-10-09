@@ -1,7 +1,6 @@
-import { extractModelOwner } from '../utils/format-model-name'
 import { enrichModelDraft } from './model-enrichment'
 import { matchesModelFilter, type ModelFilter } from './model-filter'
-import { disambiguateModelNames, resolveModelDisplayName } from './model-naming'
+import { disambiguateModelNames, resolveModelDisplayName, resolveModelOwner } from './model-naming'
 import { normalizeDiscoveredRawModel, type DiscoveredModelDraft, type DiscoveredRawModel } from './model-types'
 import type { ModelEnricher, ModelEnrichmentContext } from './model-enrichment'
 
@@ -21,7 +20,7 @@ export function classifyDiscoveredModel(model: DiscoveredRawModel): ModelClassif
 }
 
 function createInitialDraft(model: DiscoveredRawModel, classification: ModelClassification): DiscoveredModelDraft {
-  const owner = extractModelOwner(model.id)
+  const owner = resolveModelOwner({ id: model.id, raw: model })
   return {
     id: model.id,
     name: model.id,

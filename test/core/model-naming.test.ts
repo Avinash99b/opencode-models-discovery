@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { disambiguateModelNames, getOwnerLabel, resolveModelDisplayName } from '../../src/core/model-naming'
+import { disambiguateModelNames, getOwnerLabel, resolveModelDisplayName, resolveModelOwner } from '../../src/core/model-naming'
 
 describe('shared model naming', () => {
   it('preserves the complete ID when smart naming is disabled', () => {
@@ -15,7 +15,16 @@ describe('shared model naming', () => {
     )).toBe('Qwen 3 Thirty B')
   })
 
-  it('prefers owned_by and falls back to the ID namespace', () => {
+  it('resolves raw owner preferring owned_by over ID namespace', () => {
+    expect(resolveModelOwner({ id: 'gateway/gpt-5', raw: { id: 'gateway/gpt-5', owned_by: 'openai' } })).toBe('openai')
+    expect(resolveModelOwner({ id: 'gateway/gpt-5', raw: { id: 'gateway/gpt-5', owned_by: '  openai  ' } })).toBe('openai')
+    expect(resolveModelOwner({ id: 'gateway/gpt-5', raw: { id: 'gateway/gpt-5', owned_by: '' } })).toBe('gateway')
+    expect(resolveModelOwner({ id: 'gateway/gpt-5', raw: { id: 'gateway/gpt-5', owned_by: '   ' } })).toBe('gateway')
+    expect(resolveModelOwner({ id: 'gateway/gpt-5', raw: { id: 'gateway/gpt-5' } })).toBe('gateway')
+    expect(resolveModelOwner({ id: 'standalone-model', raw: { id: 'standalone-model' } })).toBeUndefined()
+  })
+
+  it('prefers owned_by and falls back to the ID namespace for owner label', () => {
     expect(getOwnerLabel({ id: 'namespace/model', raw: { id: 'namespace/model', owned_by: 'custom-owner' } })).toBe('Custom Owner')
     expect(getOwnerLabel({ id: 'qwen/model', raw: { id: 'qwen/model' } })).toBe('Qwen')
   })

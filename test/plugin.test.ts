@@ -664,6 +664,9 @@ describe('ModelDiscovery Plugin', () => {
         }),
       })
       expect(state?.models['embedding-model']).toBeUndefined()
+      expect(state?.rawModels).toEqual({
+        'chat-model': { id: 'chat-model', object: 'model', max_model_len: 32768 },
+      })
 
       const secondConfig: any = {
         provider: {
@@ -763,7 +766,7 @@ describe('ModelDiscovery Plugin', () => {
       expect(config.provider.llamaswap.models['Gemma-4-31B-It']).toMatchObject({
         id: 'Gemma-4-31B-It',
         name: 'Gemma 4 31B IT',
-        limit: { context: 9216, output: 0 },
+        limit: { context: 9216, output: 9216 },
         modalities: { input: ['text', 'image'], output: ['text'] },
         tool_call: true,
       })
@@ -1514,7 +1517,7 @@ describe('ModelDiscovery Plugin', () => {
         id: 'custom/gpt-4o',
         name: 'GPT-4o',
         tool_call: true,
-        limit: { context: 128000, output: 0 }
+        limit: { context: 128000, output: 32000 }
       }))
     })
 
@@ -2277,6 +2280,7 @@ describe('ModelDiscovery Plugin', () => {
       expect(config.provider.ollama.models['keep-me']).toEqual({
         id: 'keep-me',
         name: 'Keep Me',
+        organizationOwner: 'local',
         modalities: { input: ['text'], output: ['text'] },
       })
       expect(config.provider.ollama.models['discover-me']).toBeDefined()
@@ -2651,7 +2655,7 @@ describe('ModelDiscovery Plugin', () => {
       expect(mockFetch).toHaveBeenCalledWith('http://127.0.0.1:1234/api/v1/models', expect.any(Object))
       expect(config.provider.lmstudio.models['qwen/qwen3']).toMatchObject({
         id: 'qwen/qwen3',
-        limit: { context: 8192, output: 0 },
+        limit: { context: 8192, output: 8192 },
         tool_call: true,
       })
     })
@@ -2723,7 +2727,7 @@ describe('ModelDiscovery Plugin', () => {
       await pluginHooks.config(cachedConfig)
 
       expect(mockFetch).not.toHaveBeenCalled()
-      expect(cachedConfig.provider.lmstudio.models['qwen/qwen3'].limit).toEqual({ context: 8192, output: 0 })
+      expect(cachedConfig.provider.lmstudio.models['qwen/qwen3'].limit).toEqual({ context: 8192, output: 8192 })
     })
 
     it('should reject field filters that specify both equals and match', async () => {

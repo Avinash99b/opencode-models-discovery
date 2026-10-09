@@ -7,10 +7,15 @@ export interface NamedDiscoveredModel {
   name: string
 }
 
+export function resolveModelOwner(model: Pick<NamedDiscoveredModel, 'id' | 'raw'>): string | undefined {
+  if (typeof model.raw?.owned_by === 'string' && model.raw.owned_by.trim().length > 0) {
+    return model.raw.owned_by.trim()
+  }
+  return extractModelOwner(model.id)
+}
+
 export function getOwnerLabel(model: Pick<NamedDiscoveredModel, 'id' | 'raw'>): string | undefined {
-  const rawOwner = typeof model.raw?.owned_by === 'string' && model.raw.owned_by.trim().length > 0
-    ? model.raw.owned_by.trim()
-    : extractModelOwner(model.id)
+  const rawOwner = resolveModelOwner(model)
   if (!rawOwner) return undefined
 
   return rawOwner

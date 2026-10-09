@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { discoverModelDrafts } from '../../src/core/discovery-pipeline'
-import { mapToDiscoveredV2Model } from '../../src/v2/model-mapper'
+import { mapToV1Model } from '../../src/core/model-mapper'
+import { mapToDiscoveredV2Model } from '../../src/core/model-mapper'
 import type { ProviderDiscoveryOptions } from '../../src/v2/provider-config'
 import { createModelsDevEnricher } from '../../src/utils/model-info/models-dev'
 import { createBifrostEnricher } from '../../src/utils/model-info/bifrost'
@@ -205,11 +206,11 @@ describe('V1/V2 shared-core parity', () => {
     const mapped = mapToDiscoveredV2Model(draft, options)
 
     expect(draft.name).toBe('Gemma Local')
-    expect(draft.limit).toEqual({ context: 8192, output: 0 })
+    expect(draft.limit).toEqual({ context: 8192, output: 8192 })
     expect(draft.modalities).toEqual({ input: ['text', 'image'], output: ['text'] })
     expect(draft.toolCall).toBe(true)
     expect(mapped.name).toBe('Gemma Local')
-    expect(mapped.limit).toEqual({ context: 8192, output: 32000 })
+    expect(mapped.limit).toEqual({ context: 8192, output: 8192 })
     expect(mapped.capabilities.input).toEqual(['text', 'image'])
     expect(mapped.capabilities.tools).toBe(true)
   })
